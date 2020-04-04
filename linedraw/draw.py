@@ -165,6 +165,33 @@ def hatch(IM,sc=16):
     return lines
 
 
+def sketchImage(IM):
+    w, h = IM.size
+
+    IM = IM.convert("L")
+    IM = ImageOps.autocontrast(IM, 10)
+
+    lines = []
+    if draw_contours:
+        lines += getcontours(IM.resize((resolution // contour_simplify, resolution // contour_simplify * h // w)),
+                             contour_simplify)
+    if draw_hatch:
+        lines += hatch(IM.resize((resolution // hatch_size, resolution // hatch_size * h // w)), hatch_size)
+
+    lines = sortlines(lines)
+    if show_bitmap:
+        disp = Image.new("RGB", (resolution, resolution * h // w), (255, 255, 255))
+        draw = ImageDraw.Draw(disp)
+        for l in lines:
+            draw.line(l, (0, 0, 0), 5)
+        disp.show()
+
+    f = open(export_path, 'w')
+    f.write(makesvg(lines))
+    f.close()
+    return lines
+
+
 def sketch(path):
     IM = None
     possible = [path,"images/"+path,"images/"+path+".jpg","images/"+path+".png","images/"+path+".tif"]
@@ -176,32 +203,7 @@ def sketch(path):
             print("The Input File wasn't found. Check Path")
             exit(0)
             pass
-    w,h = IM.size
-
-    IM = IM.convert("L")
-    IM=ImageOps.autocontrast(IM,10)
-
-    lines = []
-    if draw_contours:
-        lines += getcontours(IM.resize((resolution//contour_simplify,resolution//contour_simplify*h//w)),contour_simplify)
-    if draw_hatch:
-        lines += hatch(IM.resize((resolution//hatch_size,resolution//hatch_size*h//w)),hatch_size)
-
-    lines = sortlines(lines)
-    if show_bitmap:
-        disp = Image.new("RGB",(resolution,resolution*h//w),(255,255,255))
-        draw = ImageDraw.Draw(disp)
-        for l in lines:
-            print("Currentl line: " + l)
-            draw.line(l,(0,0,0),5)
-        disp.show()
-
-    f = open(export_path,'w')
-    f.write(makesvg(lines))
-    f.close()
-    print(len(lines),"strokes.")
-    print("done.")
-    return lines
+    return sketchImage(IM)
 
 
 def makesvg(lines):

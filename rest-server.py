@@ -1,14 +1,24 @@
+import base64
+import io
+import traceback
+
+from PIL import Image
 from flask import Flask, jsonify, request, make_response
+from flask_cors import CORS, cross_origin
 from flask_httpauth import HTTPBasicAuth
-from linedraw.draw import sketch, visualize
-import cv2 as cv
-import numpy as np
-import os
+
+from linedraw.draw import sketchImage
 
 #example client request: curl -u running:art -F "file=@valtho.jpeg" -i http://localhost:5000/polylines
 
 app = Flask(__name__, static_url_path = "")
+
+cors = CORS(app, resources={r"/polylines": {"origins": "http://localhost:port"}})
+
+
 auth = HTTPBasicAuth()
+
+IMAGE_KEY = 'Image'
 
 @auth.get_password
 def get_password(username):
@@ -29,17 +39,20 @@ def not_found(error):
     return make_response(jsonify( { 'error': 'Not found' } ), 404)
 
 @app.route('/polylines', methods = ['POST'])
-@auth.login_required
+# @auth.login_required
+@cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_drawing():
-    data = request.files['file'].read()
-    npimg = np.fromstring(data, np.uint8)
-    img = cv.imdecode(npimg, cv.IMREAD_COLOR)
-    if __name__ == "__main__":
-        path ='resources/images/input.jpg'
-        cv.imwrite(path, img)
-        lines = sketch(path)
-        os.remove(path)
-    return jsonify(lines)
+    try:
+        # Parse base64 image url.
+        imageStr = request.json[IMAGE_KEY].split('base64,',1)[1]
+        msg = base64.b64decode(imageStr)
+        buf = io.BytesIO(msg)
+        img = Image.open(buf)
+        lines = sketchImage(img)
+        return jsonify(lines)
+    except Exception:
+        traceback.print_tb()
+        return ""
 
 if __name__ == '__main__':
     app.run(debug = True)
