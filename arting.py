@@ -14,8 +14,9 @@ def distance_sum_minimization(node1, node2, seg1, seg2):
     pass
 
 
-def cost_function(node1, node2, seg1, seg2):
-    return path_distance_minimization(node1, node2)
+def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
+    return alpha * path_distance_minimization(node2, seg2) + beta * path_distance_minimization(node1, node2) \
+    + gamma * distance_sum_minimization(node1, node2, seg1, seg2)
 
 
 def get_starting_node(current_location, nodes):
@@ -39,12 +40,12 @@ def initialize_graph_for_dijkstra(nodes, seg1, seg2):
     for x in list(itertools.combinations(nodes, 2)):
         g.add_edge(x[0], x[1], cost_function(x[0], x[1], seg1, seg2))
         g.add_edge(x[1], x[0], cost_function(x[1], x[0], seg1, seg2))
-    print('Graph data:')
-    for v in g:
-        for w in v.get_connections():
-            vid = v.get_id()
-            wid = w.get_id()
-            print('( %s , %s, %3d)' % (vid, wid, v.get_weight(w)))
+    # print('Graph data:')
+    # for v in g:
+    #     for w in v.get_connections():
+    #         vid = v.get_id()
+    #         wid = w.get_id()
+    #         print('( %s , %s, %3d)' % (vid, wid, v.get_weight(w)))
     return g
 
 
@@ -53,7 +54,7 @@ def run_dijkstra(graph, source, target):
     dj.dijkstra(graph, graph.get_vertex(source), target_vertex)
     path = [target_vertex.get_id()]
     dj.shortest(target_vertex, path)
-    print('The shortest path : %s' % (path[::-1]))
+    # print('The shortest path : %s' % (path[::-1]))
     return path[::-1]
 
 
