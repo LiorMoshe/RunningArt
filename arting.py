@@ -5,7 +5,7 @@ import dijkstra as dj
 import itertools
 
 
-def get_intersection_nodes(current location = ()):
+def get_intersection_nodes(current_location=[]):
     api = overpy.Overpass()
     #TODO: change bounding box per each query based on the current location
     result = api.query("""
