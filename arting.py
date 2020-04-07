@@ -40,10 +40,7 @@ def get_intersection_nodes(current_location=[]):
 </foreach>
   </osm-script>
     """)
-    nodes = []
-    for node in result.nodes:
-        nodes.append((node.lat,node.lon))
-    return nodes
+    return [(node.lat, node.lon) for node in result.nodes]
 
 
 def path_distance_minimization(point1, point2):
@@ -87,8 +84,6 @@ def get_starting_node(current_location, nodes):
 
 
 def get_next_segment(segments):
-    #TODO: return correct segment
-    #TODO: delete the next segment from the segments list
     seg = segments[0]
     segments.remove(seg)
     return seg
@@ -121,7 +116,7 @@ def run_dijkstra(graph, source, target):
     return path[::-1]
 
 
-def algorithm(current_location=[9, 9], nodes=get_intersection_nodes(), segments=[[(1,2),(3,4)]]):
+def algorithm(current_location, segments, nodes=get_intersection_nodes()):
     current_location = get_starting_node(current_location, nodes)
     path = []
     while segments:
@@ -134,5 +129,5 @@ def algorithm(current_location=[9, 9], nodes=get_intersection_nodes(), segments=
     print(path)
     return path
 
-
+print(get_intersection_nodes())
 # algorithm()
