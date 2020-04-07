@@ -8,6 +8,8 @@ import itertools
 def get_intersection_nodes(current_location=[]):
     api = overpy.Overpass()
     #TODO: change bounding box per each query based on the current location
+    #TODO: Loading this information when the user enters to the app
+
     result = api.query("""
     <osm-script>
     <query type="way" into="hw">
@@ -119,7 +121,7 @@ def run_dijkstra(graph, source, target):
     return path[::-1]
 
 
-def algorithm(current_location=[9,9], nodes=get_intersection_nodes(), segments=[[(1,2),(3,4)]]):
+def algorithm(current_location=[9, 9], nodes=get_intersection_nodes(), segments=[[(1,2),(3,4)]]):
     current_location = get_starting_node(current_location, nodes)
     path = []
     while segments:
@@ -130,6 +132,7 @@ def algorithm(current_location=[9,9], nodes=get_intersection_nodes(), segments=[
         current_location = node_near_segment
 
     print(path)
+    return path
 
 
 # algorithm()
