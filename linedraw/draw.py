@@ -1,6 +1,6 @@
 import argparse
 
-from PIL import Image, ImageOps, ImageDraw
+from PIL import Image, ImageOps, ImageDraw, ImageChops
 
 from linedraw.filters import *
 from linedraw.strokesort import *
@@ -22,6 +22,14 @@ except:
     print("Cannot import numpy/openCV. Switching to NO_CV mode.")
     no_cv = True
 
+def trim(im):
+   bg = Image.new(im.mode, im.size, im.getpixel((0,0)))
+   diff = ImageChops.difference(im, bg)
+   diff = ImageChops.add(diff, diff, 2.0, -100)
+   bbox = diff.getbbox()
+   if bbox:
+    return im.crop(bbox)
+
 def find_edges(IM):
     print("finding edges...")
     if no_cv:
@@ -32,7 +40,7 @@ def find_edges(IM):
     #     im = cv2.GaussianBlur(im,(3,3),0)
     #     im = cv2.Canny(im,100,200)
     #     IM = Image.fromarray(im)
-    return IM.point(lambda p: p > 128 and 255)  
+    return trim(IM).point(lambda p: p > 128 and 255)
 
 
 def getdots(IM):
@@ -43,7 +51,7 @@ def getdots(IM):
     for y in range(h-1):
         row = []
         for x in range(1,w):
-            if PX[x,y] == 255:
+            if PX[x,y] != 255:
                 if len(row) > 0:
                     if x-row[-1][0] == row[-1][-1]+1:
                         row[-1] = (row[-1][0],row[-1][-1]+1)
@@ -175,8 +183,8 @@ def sketchImage(IM):
     if draw_contours:
         lines += getcontours(IM.resize((resolution // contour_simplify, resolution // contour_simplify * h // w)),
                              contour_simplify)
-    if draw_hatch:
-        lines += hatch(IM.resize((resolution // hatch_size, resolution // hatch_size * h // w)), hatch_size)
+    # if draw_hatch:
+    #     lines += hatch(IM.resize((resolution // hatch_size, resolution // hatch_size * h // w)), hatch_size)
 
     lines = sortlines(lines)
     if show_bitmap:
