@@ -117,8 +117,8 @@ def dijkstra(aGraph, start, target):
                 # print(
                 # 'updated : current = %s next = %s new_dist = %s' \
                 # % (current.get_id(), next.get_id(), next.get_distance()))
-            else:
-                print()
+            # else:
+            #     print()
                 # print(
                 # 'not updated : current = %s next = %s new_dist = %s' \
                 # % (current.get_id(), next.get_id(), next.get_distance()))
