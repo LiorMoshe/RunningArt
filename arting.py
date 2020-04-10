@@ -1,12 +1,12 @@
 import numpy as np
 from operator import itemgetter
 import overpy
-import dijkstra as dj
 import itertools
 from decimal import Decimal
 from copy import deepcopy
 import os.path
-
+import networkx as nx
+from datetime import datetime
 
 def write_nodes_to_file(current_location=[], filename=".resources/nodes.txt"):
     nodes = get_intersection_nodes(current_location)
@@ -127,26 +127,15 @@ def get_segment_nearest_node(segment, nodes):
 
 
 def initialize_graph_for_dijkstra(nodes, seg1, seg2):
-    g = dj.Graph()
+    g = nx.DiGraph()
     for x in list(itertools.combinations(nodes, 2)):
-        g.add_edge(x[0], x[1], cost_function(x[0], x[1], seg1, seg2, 1, 1, 1))
-        g.add_edge(x[1], x[0], cost_function(x[1], x[0], seg1, seg2, 1, 1, 1))
-    # print('Graph data:')
-    # for v in g:
-    #     for w in v.get_connections():
-    #         vid = v.get_id()
-    #         wid = w.get_id()
-    #         print('( %s , %s, %3d)' % (vid, wid, v.get_weight(w)))
+        g.add_edge(x[0], x[1], weight=cost_function(x[0], x[1], seg1, seg2, 1, 1, 1))
+        g.add_edge(x[1], x[0], weight=cost_function(x[1], x[0], seg1, seg2, 1, 1, 1))
     return g
 
 
 def run_dijkstra(graph, source, target):
-    target_vertex = graph.get_vertex(target)
-    dj.dijkstra(graph, graph.get_vertex(source), target_vertex)
-    path = [target_vertex.get_id()]
-    dj.shortest(target_vertex, path)
-    # print('The shortest path : %s' % (path[::-1]))
-    return path[::-1]
+    return nx.dijkstra_path(graph, source, target)
 
 
 
@@ -169,8 +158,13 @@ def algorithm(current_location, segments, nodes):
         copied_nodes.remove(current_location)
         node_near_segment = get_segment_nearest_node(next_segment[1], copied_nodes)
         copied_nodes.append(current_location)
-
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        print("Current Time =", current_time)
         path.append(run_dijkstra(graph, current_location, node_near_segment))
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        print("Current Time =", current_time)
         current_location = node_near_segment
 
     print(path)
@@ -180,6 +174,8 @@ def algorithm(current_location, segments, nodes):
         float_path.append([float(point[0][0]), float(point[0][1])])
     return float_path
 
+
+
 if __name__=="__main__":
-    print(get_intersection_nodes())
-# algorithm()
+    # algorithm()
+    print()
