@@ -8,10 +8,21 @@ from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS, cross_origin
 from flask_httpauth import HTTPBasicAuth
 import numpy as np
-from arting import algorithm
+from arting import *
 from decimal import Decimal
 
 from linedraw.draw import sketchImage
+
+'''
+Converts osm's nodes to a serializable format.
+'''
+def convert_nodes_to_float(nodes):
+    converted_nodes = []
+    for node in nodes:
+        converted_nodes.append([float(node[0]),float(node[1])])
+
+    return converted_nodes
+
 
 def convert_coordinates(polylines, initial_pos, scale=1):
     '''
@@ -98,6 +109,10 @@ def not_found(error):
 def not_found(error):
     return make_response(jsonify( { 'error': 'Not found' } ), 404)
 
+
+nodes = None
+converted_nodes = None
+
 @app.route('/polylines', methods = ['POST'])
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
@@ -114,11 +129,15 @@ def send_drawing():
         geo_lines = convert_coordinates(lines, initial_pos)
         decimal_lines = segments_as_decimal(geo_lines)
         connected_segments = preprocess_segments(decimal_lines)
-        out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments)
-        return jsonify({"segments": geo_lines, "result": out})
+        out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, nodes)
+        return jsonify({"segments": geo_lines, "result": out, "nodes": converted_nodes})
     # except Exception:
     #     traceback.print_tb()
     #     return ""
 
+
 if __name__ == '__main__':
+    # Get the intersection nodes.
+    nodes = get_intersection_nodes_from_file()
+    converted_nodes = convert_nodes_to_float(nodes)
     app.run(debug = True)

@@ -5,19 +5,50 @@ import dijkstra as dj
 import itertools
 from decimal import Decimal
 from copy import deepcopy
+import os.path
 
+
+def write_nodes_to_file(current_location=[], filename=".resources/nodes.txt"):
+    nodes = get_intersection_nodes(current_location)
+    with open(filename, 'w') as nodes_file:
+        for node in nodes:
+            nodes_file.write(str(node[0]) + "," + str(node[1]) + '\n')
+
+        nodes_file.close()
+    return nodes
+
+
+def get_intersection_nodes_from_file(current_location=[], filename="./resources/nodes.txt"):
+    if os.path.isfile(filename):
+        try:
+            nodes = []
+            with open(filename,'r') as nodes_file:
+                for line in nodes_file.readlines():
+                    splitted_line = line.replace('\n','').split(',')
+                    nodes.append((Decimal(splitted_line[0]),Decimal(splitted_line[1])))
+
+            return nodes
+        except Exception:
+            pass
+    else:
+        return write_nodes_to_file(current_location,filename)
+
+
+'''
+Get the nodes out of osm's map. Currently it is fixed.
+'''
 def get_intersection_nodes(current_location=[]):
     api = overpy.Overpass()
     #TODO: change bounding box per each query based on the current location
     #TODO: Loading this information when the user enters to the app
 
     result = api.query("""
-    <osm-script>
-    <query type="way" into="hw">
+ <osm-script>
+<query type="way" into="hw">
   <has-kv k="highway"/>
   <has-kv k="highway" modv="not" regv="footway|cycleway|path|service|track"/>
-   <bbox-query e="7.157" n="50.748" s="50.746" w="7.154"/> 
-    </query>
+<bbox-query e="-73.986" n="40.767" s="40.758" w="-73.997"/> 
+</query>
 
 <foreach from="hw" into="w">
   <recurse from="w" type="way-node" into="ns"/>
@@ -118,7 +149,15 @@ def run_dijkstra(graph, source, target):
     return path[::-1]
 
 
-def algorithm(current_location, segments, nodes=get_intersection_nodes()):
+
+def algorithm(current_location, segments, nodes):
+    '''
+    Executes dijkstra's algorithm based on the given nodes.
+    :param current_location:
+    :param segments:
+    :param nodes:
+    :return:
+    '''
     current_location = get_starting_node(current_location, nodes)
     path = []
 
