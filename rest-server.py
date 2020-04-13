@@ -1,4 +1,5 @@
 import base64
+import cv2
 import io
 import traceback
 import math
@@ -10,8 +11,8 @@ from flask_httpauth import HTTPBasicAuth
 import numpy as np
 from arting import *
 from decimal import Decimal
+from segments.cv_contours import *
 
-from linedraw.draw import sketchImage
 
 '''
 Converts osm's nodes to a serializable format.
@@ -39,16 +40,13 @@ def convert_coordinates(polylines, initial_pos, scale=1):
     if len(polylines) == 0 or len(polylines[0]) == 0:
         raise ValueError("Received empty list of polylines")
 
-    flattened_polylines = []
-    for polyline in polylines:
-        for point in polyline:
-            flattened_polylines.append(point)
-
-    geo_polylines = [initial_pos]
+    current_xy = polylines[0][0]
     current_geo = initial_pos
-    current_xy = flattened_polylines[0]
-    for idx, point in enumerate(flattened_polylines):
-        if idx > 0:
+    geo_polylines = []
+
+    for polyline in polylines:
+        geo_polyline = []
+        for point in polyline:
             x_diff = point[0] - current_xy[0]
             y_diff = -(point[1] - current_xy[1])
 
@@ -56,12 +54,10 @@ def convert_coordinates(polylines, initial_pos, scale=1):
             long_diff = 1 / (111111 * math.cos(current_geo[0] * math.pi / 180)) * x_diff
 
             geo_pos = (current_geo[0] + lat_diff, current_geo[1] + long_diff)
-            geo_polylines.append(geo_pos)
+            geo_polyline.append(geo_pos)
             current_geo = geo_pos
             current_xy = point
-
-
-
+        geo_polylines.append(geo_polyline)
     return geo_polylines
 
 def segments_as_decimal(polylines):
@@ -125,15 +121,24 @@ def send_drawing():
         msg = base64.b64decode(imageStr)
         buf = io.BytesIO(msg)
         img = Image.open(buf)
-        lines = sketchImage(img)
+        lines = find_thick_contours(img)
+
+        # Perform averaging to remove redundant points.
+        while True:
+            lines, changed = segments_averaging(lines)
+            if not changed:
+                break
+
         geo_lines = convert_coordinates(lines, initial_pos)
-        decimal_lines = segments_as_decimal(geo_lines)
-        connected_segments = preprocess_segments(decimal_lines)
-        out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, nodes)
+        geo_lines = connect_letters(initial_pos, geo_lines)
+        print("Number of segments: ", len(geo_lines))
+        out = []
+
+        # Currently we do not use the algorithm.
+        # decimal_lines = segments_as_decimal(geo_lines)
+        # connected_segments = preprocess_segments(decimal_lines)
+        # out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, nodes)
         return jsonify({"segments": geo_lines, "result": out, "nodes": converted_nodes})
-    # except Exception:
-    #     traceback.print_tb()
-    #     return ""
 
 
 if __name__ == '__main__':

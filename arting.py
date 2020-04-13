@@ -182,4 +182,3 @@ def algorithm(current_location, segments, nodes):
 
 if __name__=="__main__":
     print(get_intersection_nodes())
-# algorithm()
