@@ -228,7 +228,13 @@ def segments_averaging(segments):
         new_polyline = []
         print("Old Polyline: ", polyline)
         for point in polyline:
-            new_polyline.append(idx_to_center[point_to_idx[point]])
+            prev_point = None
+            if len(new_polyline) > 0:
+                prev_point = new_polyline[len(new_polyline) - 1]
+
+            current_center = idx_to_center[point_to_idx[point]]
+            if current_center != prev_point:
+                new_polyline.append(idx_to_center[point_to_idx[point]])
         print("New Polyline: ", new_polyline)
         new_segments.append(new_polyline)
 
@@ -307,9 +313,19 @@ if __name__=="__main__":
 
     # Let's load a simple image with 3 black squares
 
-    image = Image.open('pil_text_font_o.png')
+    image = Image.open('pil_text_font_l.png')
 
     lines = find_thick_contours(image)
+    while True:
+        lines, changed = segments_averaging(lines)
+        if not changed:
+            break
+
+    # print("Lines: ", lines)
+    for line in lines:
+        print("Line: ", line)
+
+
     # Run turtle visualization
     visualize(lines)
 
