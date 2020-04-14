@@ -62,7 +62,14 @@ def convert_coordinates(polylines, initial_pos, scale=1):
 
 def segments_as_decimal(polylines):
     updated_polylines = []
+
+    # adjust input
+    polylines_fixes = []
     for polyline in polylines:
+        for pol in polyline:
+            polylines_fixes.append(pol)
+
+    for polyline in polylines_fixes:
         updated_polylines.append((Decimal(polyline[0]), Decimal(polyline[1])))
     return updated_polylines
 
@@ -135,9 +142,9 @@ def send_drawing():
         out = []
 
         # Currently we do not use the algorithm.
-        # decimal_lines = segments_as_decimal(geo_lines)
-        # connected_segments = preprocess_segments(decimal_lines)
-        # out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, nodes)
+        decimal_lines = segments_as_decimal(geo_lines)
+        connected_segments = preprocess_segments(decimal_lines)
+        out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, nodes)
         return jsonify({"segments": geo_lines, "result": out, "nodes": converted_nodes})
 
 
