@@ -152,5 +152,5 @@ if __name__ == '__main__':
     # Get the intersection nodes.
     decimal_nodes, nodes, tree = get_intersection_nodes_from_file()
     converted_nodes = convert_nodes_to_float(decimal_nodes)
-    print("average euclidean distance is: ", average_euclidean_distance(tree, nodes))
+    print("average meters distance is: ", average_euclidean_distance(tree, nodes))
     app.run(debug = True)

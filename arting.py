@@ -9,6 +9,7 @@ import os.path
 import math
 from scipy import spatial
 from segments import cv_contours as geo
+from geopy.distance import geodesic
 
 def cartesian(latitude, longitude, elevation = 0):
     # Convert to radians
@@ -38,15 +39,15 @@ def average_euclidean_distance(tree, nodes):
             if idx in calculated_nodes.keys():
                 if calculated_nodes[idx] != node_idx:
                     calculated_nodes[node_idx] = idx
-                    # length_sum = length_sum + distances[counter]
-                    # same output with above line
-                    length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]),float(nodes[idx][1]))
+                    length_sum = length_sum + geodesic((node[0],node[1]), (nodes[idx][0],nodes[idx][1])).meters
+                    #length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]),float(nodes[idx][1]))
                     break
             else:
                 calculated_nodes[node_idx] = idx
                 # length_sum = length_sum + distances[counter]
                 # same output with above line
-                length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]), float(nodes[idx][1]))
+                length_sum = length_sum + geodesic((node[0], node[1]), (nodes[idx][0], nodes[idx][1])).meters
+                #length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]), float(nodes[idx][1]))
                 break
             counter = counter + 1
         node_idx = node_idx + 1
