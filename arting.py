@@ -1,15 +1,58 @@
 import numpy as np
 from operator import itemgetter
 import overpy
+import dijkstra as dj
 import itertools
 from decimal import Decimal
 from copy import deepcopy
 import os.path
-import networkx as nx
-from datetime import datetime
-import sys
+import math
+from scipy import spatial
+from segments import cv_contours as geo
 
-nodes_length_dict = {}
+def cartesian(latitude, longitude, elevation = 0):
+    # Convert to radians
+    latitude = latitude * (math.pi / 180)
+    longitude = longitude * (math.pi / 180)
+    R = 6371 # 6378137.0 + elevation  # relative to centre of the earth
+    X = R * math.cos(latitude) * math.cos(longitude)
+    Y = R * math.cos(latitude) * math.sin(longitude)
+    Z = R * math.sin(latitude)
+    return (X, Y, Z)
+
+
+def find_nearest_nodes(lat, lon, tree):
+    cartesian_coord = cartesian(lat, lon)
+    closest = tree.query([cartesian_coord], k=10, p=2)
+    return closest[1][0][1:], closest[0][0][1:]
+
+
+def average_euclidean_distance(tree, nodes):
+    calculated_nodes = {}
+    length_sum = 0
+    node_idx = 0
+    for node in nodes[:-1]:
+        counter = 0
+        indexes, distances = find_nearest_nodes(float(node[0]), float(node[1]), tree)
+        for idx in indexes:
+            if idx in calculated_nodes.keys():
+                if calculated_nodes[idx] != node_idx:
+                    calculated_nodes[node_idx] = idx
+                    # length_sum = length_sum + distances[counter]
+                    # same output with above line
+                    length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]),float(nodes[idx][1]))
+                    break
+            else:
+                calculated_nodes[node_idx] = idx
+                # length_sum = length_sum + distances[counter]
+                # same output with above line
+                length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]), float(nodes[idx][1]))
+                break
+            counter = counter + 1
+        node_idx = node_idx + 1
+    return length_sum/node_idx
+
+
 def write_nodes_to_file(current_location=[], filename=".resources/nodes.txt"):
     nodes = get_intersection_nodes(current_location)
     with open(filename, 'w') as nodes_file:
@@ -23,13 +66,18 @@ def write_nodes_to_file(current_location=[], filename=".resources/nodes.txt"):
 def get_intersection_nodes_from_file(current_location=[], filename="./resources/nodes.txt"):
     if os.path.isfile(filename):
         try:
+            decimal_nodes = []
+            places = []
             nodes = []
             with open(filename,'r') as nodes_file:
                 for line in nodes_file.readlines():
-                    splitted_line = line.replace('\n','').split(',')
-                    nodes.append((Decimal(splitted_line[0]),Decimal(splitted_line[1])))
-
-            return nodes
+                    splitted_line = line.split()
+                    cartesian_coord = cartesian(float(splitted_line[0]), float(splitted_line[1]))
+                    places.append(cartesian_coord)
+                    decimal_nodes.append((Decimal(splitted_line[0]),Decimal(splitted_line[1])))
+                    nodes.append([splitted_line[0], splitted_line[1]])
+            tree = spatial.KDTree(places)
+            return decimal_nodes, nodes, tree
         except Exception:
             pass
     else:
