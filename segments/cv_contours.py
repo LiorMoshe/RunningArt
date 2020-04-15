@@ -4,6 +4,10 @@ import math
 from PIL import Image
 from skimage import img_as_float, color, morphology
 
+from segments.my_cv_contours import get_lat_long_dist
+from segments.distance_alignment import *
+from segments.utils import convert_coordinates
+
 
 def _palette_is_grayscale(pil_image):
     """Return True if PIL image in palette mode is grayscale.
@@ -171,7 +175,7 @@ def visualize(lines):
     turtle.mainloop()
 
 
-def segments_averaging(segments):
+def segments_averaging(segments, average_dist=10):
     new_segments = []
     centers = []
     idx_to_center = {}
@@ -179,7 +183,6 @@ def segments_averaging(segments):
     center_to_participants = {}
     point_to_idx = {}
     changed = False
-
 
     curr_idx = 0
     for polyline in segments:
@@ -196,7 +199,7 @@ def segments_averaging(segments):
                         closest = center
                         closest_dist = dist
 
-                if closest is None or closest_dist > 10:
+                if closest is None or closest_dist > average_dist:
                     centers.append(point)
                     center_to_participants[point] = 1
 
@@ -227,6 +230,7 @@ def segments_averaging(segments):
 
         new_polyline = []
         print("Old Polyline: ", polyline)
+        print("Centers: ", centers)
         for point in polyline:
             prev_point = None
             if len(new_polyline) > 0:
@@ -239,39 +243,27 @@ def segments_averaging(segments):
         new_segments.append(new_polyline)
 
 
+    for polyline in  new_segments:
+        locations = set(polyline)
+        was_visited = {location: False for location in locations}
+        indices_to_be_removed = []
+        for idx, point in enumerate(polyline):
+            if was_visited[point]:
+                if all(value for value in was_visited.values()):
+                    indices_to_be_removed = [idx] + indices_to_be_removed
+            else:
+                was_visited[point] = True
+
+        for idx in indices_to_be_removed:
+            del polyline[idx]
+
+
+
     return new_segments, changed
 
-# def remove_redundant_segments():
 
 
-# function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
-#   var R = 6371; // Radius of the earth in km
-#   var dLat = deg2rad(lat2-lat1);  // deg2rad below
-#   var dLon = deg2rad(lon2-lon1);
-#   var a =
-#     Math.sin(dLat/2) * Math.sin(dLat/2) +
-#     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-#     Math.sin(dLon/2) * Math.sin(dLon/2)
-#     ;
-#   var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-#   var d = R * c; // Distance in km
-#   return d;
-# }
-#
-# function deg2rad(deg) {
-#   return deg * (Math.PI/180)
-# }
 
-def get_lat_long_dist(lat1, lon1, lat2, lon2):
-    deg2rad = lambda deg: deg * math.pi / 180
-    R = 6371
-    dLat = deg2rad(lat2 - lat1)
-    dLon = deg2rad(lon2 - lon1)
-    a = math.sin(dLat / 2) * math.sin(dLat / 2) + math.cos(deg2rad(lat1)) * math.cos(deg2rad(lat2)) * \
-        math.sin(dLon / 2) * math.sin(dLon / 2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    d = R * c
-    return d
 
 def connect_letters(starting_location, segments):
     '''
@@ -288,7 +280,6 @@ def connect_letters(starting_location, segments):
 
     sorted_idx = {k: v for k, v in sorted(idx_to_dist.items(), key=lambda item: item[1])}
     sorted_indices = list(sorted_idx.keys())
-    print("Sorted: ", sorted_indices)
     for i, idx in enumerate(sorted_indices):
         new_segments.append(segments[idx])
         if i < len(sorted_indices) - 1:
@@ -306,14 +297,12 @@ def connect_letters(starting_location, segments):
 
             new_segments.append(new_polyline)
 
-
     return new_segments
+
 
 if __name__=="__main__":
 
-    # Let's load a simple image with 3 black squares
-
-    image = Image.open('pil_text_font_l.png')
+    image = Image.open('pil_text_font_e.png')
 
     lines = find_thick_contours(image)
     while True:
@@ -321,13 +310,13 @@ if __name__=="__main__":
         if not changed:
             break
 
-    # print("Lines: ", lines)
-    for line in lines:
-        print("Line: ", line)
+    dist = calculate_distance(lines[0])
+    print(dist)
+    adjusted = scale_route_to_distance(2000, lines[0])
+    print(adjusted)
 
+    visualize([adjusted])
 
-    # Run turtle visualization
-    visualize(lines)
 
 
 

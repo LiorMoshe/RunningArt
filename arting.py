@@ -10,6 +10,9 @@ import math
 from scipy import spatial
 from segments import cv_contours as geo
 from geopy.distance import geodesic
+import networkx as nx
+
+nearest_nodes = {}
 
 def cartesian(latitude, longitude, elevation = 0):
     # Convert to radians
@@ -24,7 +27,7 @@ def cartesian(latitude, longitude, elevation = 0):
 
 def find_nearest_nodes(lat, lon, tree):
     cartesian_coord = cartesian(lat, lon)
-    closest = tree.query([cartesian_coord], k=10, p=2)
+    closest = tree.query([cartesian_coord], k=8, p=2)
     return closest[1][0][1:], closest[0][0][1:]
 
 
@@ -35,6 +38,7 @@ def average_euclidean_distance(tree, nodes):
     for node in nodes[:-1]:
         counter = 0
         indexes, distances = find_nearest_nodes(float(node[0]), float(node[1]), tree)
+        nearest_nodes[node_idx] = indexes
         for idx in indexes:
             if idx in calculated_nodes.keys():
                 if calculated_nodes[idx] != node_idx:
@@ -51,6 +55,8 @@ def average_euclidean_distance(tree, nodes):
                 break
             counter = counter + 1
         node_idx = node_idx + 1
+    indexes, distances = find_nearest_nodes(float(nodes[node_idx][0]), float(nodes[node_idx][1]), tree)
+    nearest_nodes[node_idx] = indexes
     return length_sum/node_idx
 
 
@@ -156,7 +162,7 @@ def distance_sum_minimization(node1, node2, seg1, seg2, n=1):
         result += calculate_function_r(node1, node2, upper_k, lower_p)
     return result
 
-
+nodes_length_dict ={}
 def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
     c1 = alpha * path_distance_minimization(node2, seg2)
     if (node1, node2) in nodes_length_dict.keys():
@@ -186,9 +192,16 @@ def get_segment_nearest_node(segment, nodes):
 
 def initialize_graph_for_dijkstra(nodes, seg1, seg2):
     g = nx.DiGraph()
-    for x in list(itertools.combinations(nodes, 2)):
-        g.add_edge(x[0], x[1], weight=cost_function(x[0], x[1], seg1, seg2, 1, 1, 1))
-        g.add_edge(x[1], x[0], weight=cost_function(x[1], x[0], seg1, seg2, 1, 1, 1))
+    counter = 0
+    for node in nodes:
+        for idx in nearest_nodes[counter][:5]:
+            g.add_edge(node, nodes[idx], weight=cost_function(node, nodes[idx], seg1, seg2, 1, 1, 1))
+        counter = counter + 1
+
+
+    # for x in list(itertools.combinations(nodes, 2)):
+    #     g.add_edge(x[0], x[1], weight=cost_function(x[0], x[1], seg1, seg2, 1, 1, 1))
+    #     g.add_edge(x[1], x[0], weight=cost_function(x[1], x[0], seg1, seg2, 1, 1, 1))
     return g
 
 
@@ -230,4 +243,3 @@ def algorithm(current_location, segments, nodes):
 if __name__=="__main__":
     print()
     # algorithm()
-
