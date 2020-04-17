@@ -116,7 +116,20 @@ def pil_to_ndarray(image, dtype=None, img_num=None):
     elif img_num:
         raise IndexError('Could not find image  #%s' % img_num)
 
-def findContours(img):
+
+
+def findExternalContours(img):
+    lines = find_thick_contours(img, cv2_mode=cv2.RETR_EXTERNAL)
+
+    # Connect the first and last point of the contours.
+    if len(lines) > 1:
+        raise Exception("More than 1 external polyline")
+
+    polyline = lines[0]
+    polyline.append(polyline[0])
+    return [polyline]
+
+def findContours(img, cv2_mode=cv2.RETR_TREE):
     """
     Receives a PIL image and returns its contour points.
     :param img:
@@ -132,7 +145,7 @@ def findContours(img):
 
 
     contours, hierarchy = cv2.findContours(gray,
-                                           cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                                           cv2_mode, cv2.CHAIN_APPROX_SIMPLE)
 
 
     # Convert the contours to a matching format.
@@ -147,11 +160,11 @@ def findContours(img):
 
     return lines
 
-def find_thick_contours(img):
+def find_thick_contours(img, cv2_mode=cv2.RETR_TREE):
     image = img_as_float(color.rgb2gray(pil_to_ndarray(img)))
     image_binary = image < 0.5
     IM = img_frombytes(morphology.thin(image_binary))
-    return findContours(IM)
+    return findContours(IM, cv2_mode=cv2_mode)
 
 def img_frombytes(data):
     size = data.shape[::-1]
@@ -175,8 +188,15 @@ def visualize(lines):
     turtle.mainloop()
 
 
-def segments_averaging(segments, average_dist=10):
-    new_segments = []
+def polyline_averaging(polyline, average_dist=10):
+    """
+    Perform averaging of the points along the given polyline.
+    We don't want small segments in our polyline so we limit the distance between each pair of points in the path
+    to be of distance of at most average_dist.
+    :param polyline:
+    :param average_dist:
+    :return:
+    """
     centers = []
     idx_to_center = {}
     center_to_idx = {}
@@ -185,83 +205,81 @@ def segments_averaging(segments, average_dist=10):
     changed = False
 
     curr_idx = 0
-    for polyline in segments:
-        seen = []
-        for point in polyline:
-            if point not in seen:
-                seen.append(point)
-                closest = None
-                closest_dist = float('inf')
+    print("Input polyline: ", polyline)
+    # for polyline in segments:
+    seen = []
+    for point in polyline:
+        if point not in seen:
+            seen.append(point)
+            closest = None
+            closest_dist = float('inf')
 
-                for center in centers:
-                    dist = math.sqrt((center[0] - point[0]) ** 2 + (center[1] - point[1]) ** 2)
-                    if dist < closest_dist:
-                        closest = center
-                        closest_dist = dist
+            for center in centers:
+                dist = math.sqrt((center[0] - point[0]) ** 2 + (center[1] - point[1]) ** 2)
+                if dist < closest_dist:
+                    closest = center
+                    closest_dist = dist
 
-                if closest is None or closest_dist > average_dist:
-                    centers.append(point)
-                    center_to_participants[point] = 1
+            if closest is None or closest_dist > average_dist:
+                centers.append(point)
+                center_to_participants[point] = 1
 
-                    idx_to_center[curr_idx] = point
-                    center_to_idx[point] = curr_idx
-                    point_to_idx[point] = curr_idx
+                idx_to_center[curr_idx] = point
+                center_to_idx[point] = curr_idx
+                point_to_idx[point] = curr_idx
 
-                    # Increment the idx.
-                    curr_idx += 1
-                elif closest_dist > 1:
-                    # There is some change to the centers, notify.
-                    changed = True
+                # Increment the idx.
+                curr_idx += 1
+            elif closest_dist > 1:
+                # There is some change to the centers, notify.
+                # print("Changed")
+                changed = True
 
-                    idx = center_to_idx[closest]
-                    del idx_to_center[idx]
-                    centers.remove(closest)
-                    n = center_to_participants[closest]
-                    new_center = ((n / (n+1)) * closest[0] + (1 / (n+1)) * point[0],
-                                  (n / (n+1)) * closest[1] + (1 / (n+1)) * point[1])
-                    del center_to_participants[closest]
-                    center_to_participants[new_center] = n+1
-                    centers.append(new_center)
-                    idx_to_center[idx] = new_center
-                    point_to_idx[point] = idx
-                    center_to_idx[new_center] = idx
-                else:
-                    point_to_idx[point] = center_to_idx[closest]
-
-        new_polyline = []
-        print("Old Polyline: ", polyline)
-        print("Centers: ", centers)
-        for point in polyline:
-            prev_point = None
-            if len(new_polyline) > 0:
-                prev_point = new_polyline[len(new_polyline) - 1]
-
-            current_center = idx_to_center[point_to_idx[point]]
-            if current_center != prev_point:
-                new_polyline.append(idx_to_center[point_to_idx[point]])
-        print("New Polyline: ", new_polyline)
-        new_segments.append(new_polyline)
-
-
-    for polyline in  new_segments:
-        locations = set(polyline)
-        was_visited = {location: False for location in locations}
-        indices_to_be_removed = []
-        for idx, point in enumerate(polyline):
-            if was_visited[point]:
-                if all(value for value in was_visited.values()):
-                    indices_to_be_removed = [idx] + indices_to_be_removed
+                idx = center_to_idx[closest]
+                del idx_to_center[idx]
+                centers.remove(closest)
+                n = center_to_participants[closest]
+                new_center = ((n / (n+1)) * closest[0] + (1 / (n+1)) * point[0],
+                              (n / (n+1)) * closest[1] + (1 / (n+1)) * point[1])
+                del center_to_participants[closest]
+                center_to_participants[new_center] = n+1
+                centers.append(new_center)
+                idx_to_center[idx] = new_center
+                point_to_idx[point] = idx
+                center_to_idx[new_center] = idx
             else:
-                was_visited[point] = True
+                point_to_idx[point] = center_to_idx[closest]
 
-        for idx in indices_to_be_removed:
-            del polyline[idx]
+    new_polyline = []
+    for point in polyline:
+        prev_point = None
+        if len(new_polyline) > 0:
+            prev_point = new_polyline[len(new_polyline) - 1]
+
+        current_center = idx_to_center[point_to_idx[point]]
+        if current_center != prev_point:
+            new_polyline.append(idx_to_center[point_to_idx[point]])
 
 
+    locations = set(new_polyline)
+    was_visited = {location: False for location in locations}
+    visited_twice = {location: False for location in locations}
+    indices_to_be_removed = []
+    for idx, point in enumerate(new_polyline):
+        if was_visited[point]:
+            if all(value for value in was_visited.values()):
+                if any(value for value in visited_twice.values()):
+                    indices_to_be_removed = [idx] + indices_to_be_removed
+                else:
+                    visited_twice[point] = True
+        else:
+            was_visited[point] = True
 
-    return new_segments, changed
+    for idx in indices_to_be_removed:
+        del new_polyline[idx]
 
-
+    print("Output polyline: ", new_polyline)
+    return new_polyline, changed
 
 
 
@@ -302,20 +320,27 @@ def connect_letters(starting_location, segments):
 
 if __name__=="__main__":
 
-    image = Image.open('pil_text_font_e.png')
+    image = Image.open('pil_text_font_b.png')
 
     lines = find_thick_contours(image)
-    while True:
-        lines, changed = segments_averaging(lines)
-        if not changed:
-            break
+    # lines = findExternalContours(image)
 
-    dist = calculate_distance(lines[0])
-    print(dist)
-    adjusted = scale_route_to_distance(2000, lines[0])
-    print(adjusted)
+    print("Iterating over polylines: ", len(lines))
+    for line in lines:
+        print("Line: ", line)
 
-    visualize([adjusted])
+    visualize(lines)
+    # while True:
+    #     lines, changed = polyline_averaging(lines)
+    #     if not changed:
+    #         break
+    #
+    # dist = calculate_distance(lines[0])
+    # print(dist)
+    # adjusted = scale_route_to_distance(2000, lines[0])
+    # print(adjusted)
+    #
+    # visualize([adjusted])
 
 
 

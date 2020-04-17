@@ -20,7 +20,11 @@ auth = HTTPBasicAuth()
 
 IMAGE_KEY = 'Image'
 
+TEXT_KEY = 'Text'
+
 POSITION_KEY = 'Position'
+
+DISTANCE_KEY= 'Distance'
 
 @auth.get_password
 def get_password(username):
@@ -51,41 +55,49 @@ required_average = None
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_drawing():
     # try:
-        # Parse base64 image url.
-        imageStr = request.json[IMAGE_KEY].split('base64,',1)[1]
+
         initial_pos = request.json[POSITION_KEY]
+        distance = request.json[DISTANCE_KEY]
         print(initial_pos)
-        msg = base64.b64decode(imageStr)
-        buf = io.BytesIO(msg)
-        img = Image.open(buf)
-        lines = find_thick_contours(img)
+        print("Received distance: ", distance)
+
+        # Parse base64 image url.
+        if IMAGE_KEY in request.json:
+            imageStr = request.json[IMAGE_KEY].split('base64,', 1)[1]
+            msg = base64.b64decode(imageStr)
+            buf = io.BytesIO(msg)
+            img = Image.open(buf)
+        else:
+            img = text_to_image(request.json[TEXT_KEY])
+        lines = findExternalContours(img)
+        polyline = connect_polylines(lines)
+
 
         # TODO-Currently we scale the image only after we receive a full polyline of the image.
         # Convert the format from a single polyline to a set of polylines.
-        if len(lines) == 1:
-            polyline = lines[0]
-            updated_poly = scale_route_to_distance(10000, polyline, average_distance=required_average)
-            lines = [updated_poly]
+        polyline = scale_route_to_distance(distance, polyline, average_distance=required_average)
 
 
         # Perform averaging to remove redundant points.
         while True:
-            lines, changed = segments_averaging(lines, average_dist=required_average)
+            print("Averaging")
+            polyline, changed = polyline_averaging(polyline, average_dist=required_average)
             if not changed:
                 break
 
 
-        geo_lines = convert_coordinates(lines, initial_pos)
+        geo_polyline = convert_coordinates(polyline, initial_pos)
 
         # Currently we don't connect any letters at all.
         # geo_lines = connect_letters(initial_pos, geo_lines)
 
         # Currently we do not use the algorithm.
-        decimal_lines = segments_as_decimal(geo_lines)
-        connected_segments = preprocess_segments(decimal_lines)
+        decimal_polyline = convert_polyline_to_decimal(geo_polyline)
+        connected_segments = preprocess_segments(decimal_polyline)
+        print("Connected segments.")
         # out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, decimal_nodes)
         out = []
-        return jsonify({"segments": geo_lines, "result": out, "nodes": converted_nodes})
+        return jsonify({"segments": geo_polyline, "result": out, "nodes": converted_nodes})
 
 
 if __name__ == '__main__':

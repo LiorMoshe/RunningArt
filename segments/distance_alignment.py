@@ -43,6 +43,7 @@ def get_angle_from_point(source, target):
 def scale_route_to_distance(target_distance, polyline, average_distance=None):
     '''
     Perform scaling of the trajectory based on the target distance.
+    Works only on a single polyline!
     :param target_distance:
     :param polyline:
     :return:
