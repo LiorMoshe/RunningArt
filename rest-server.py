@@ -95,15 +95,14 @@ def send_drawing():
         decimal_polyline = convert_polyline_to_decimal(geo_polyline)
         connected_segments = preprocess_segments(decimal_polyline)
         print("Connected segments.")
-        # out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, decimal_nodes)
-        out = []
+        out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments)
         return jsonify({"segments": geo_polyline, "result": out, "nodes": converted_nodes})
 
 
 if __name__ == '__main__':
     # Get the intersection nodes.
-    decimal_nodes, nodes, tree = get_intersection_nodes_from_file()
-    converted_nodes = convert_nodes_to_float(decimal_nodes)
-    required_average = average_euclidean_distance(tree, nodes)
-    # print("average meters distance is: ", average_euclidean_distance(tree, nodes))
-    app.run(debug = True)
+
+    ways = get_intersection_nodes_with_ways()
+    initialize_ways_graph(ways)
+    required_average = compute_average_distance()
+    app.run()
