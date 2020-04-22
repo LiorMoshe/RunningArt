@@ -44,6 +44,8 @@ def convert_coordinates(polyline, initial_pos):
 
 
             lat_diff = 1 / 111111 * y_diff
+            print("Previous map: ", previous_map)
+            print("Current geo: ", current_geo)
             long_diff = 1 / (111111 * math.cos(current_geo[0] * math.pi / 180)) * x_diff
 
             geo_pos = (current_geo[0] + lat_diff, current_geo[1] + long_diff)
@@ -59,7 +61,7 @@ Converts osm's nodes to a serializable format.
 def convert_nodes_to_float(nodes):
     converted_nodes = []
     for node in nodes:
-        converted_nodes.append([float(node[0]),float(node[1])])
+        converted_nodes.append([float(node.lat),float(node.lon)])
 
     return converted_nodes
 
@@ -73,7 +75,7 @@ def connect_polylines(polylines):
     :param polylines:
     :return:
     """
-    if len(polylines) == 0:
+    if len(polylines) == 1:
         return polylines[0]
 
     connected_polyline = []

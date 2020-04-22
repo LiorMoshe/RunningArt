@@ -20,6 +20,9 @@ intersections_nodes_idx = [286643475, 317214411, 357500272, 357545243, 366653136
 # Maps node is to location
 nodes_id_to_location = {}
 
+# For debugging, location to id.
+location_to_id = {}
+
 def get_intersection_nodes_with_ways(current_location=[]):
     api = overpy.Overpass()
     result = api.query("""
@@ -44,7 +47,7 @@ def get_intersection_nodes_with_ways(current_location=[]):
 </osm-script>
             """)
     print("done ways")
-    return result.ways
+    return result.ways, result.nodes
 
 def initialize_ways_graph(ways):
     for way in ways:
@@ -55,6 +58,7 @@ def initialize_ways_graph(ways):
             if node.id in intersections_nodes_idx:
                 if node.id not in nodes_id_to_location:
                     nodes_id_to_location[node.id] = (node.lat, node.lon)
+                    location_to_id[(float(node.lat), float(node.lon))] = node.id
                     if node.id not in nodes_ways.keys():
                         nodes_ways[node.id] = []
                 if idx < len(way_nodes) - 1:
@@ -229,13 +233,62 @@ def calculate_function_r(node1, node2, upper_k, lower_p):
     return path_distance_minimization(upper_k, np.add(node1, lower_p * np.subtract(node2, node1)))
 
 
-def distance_sum_minimization(node1, node2, seg1, seg2, n=1):
+def distance_sum_minimization(node1, node2, seg1, seg2, n=50):
+    """
+    Compute a sum of the distances between the figure segment and two neighboring nodes of the graph.
+    This approach is based on the Riemann sum with the idea of computing the area that lies between
+    two straight lines.
+    :param node1:
+    :param node2:
+    :param seg1:
+    :param seg2:
+    :param n:
+    :return:
+    """
+    node1 = (float(node1[0]), float(node1[1]))
+    node2 = (float(node2[0]), float(node2[1]))
+    seg1 = (float(seg1[0]), float(seg1[1]))
+    seg2 = (float(seg2[0]), float(seg2[1]))
+    # print("Nodes length: ", math.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2))
     result = 0
-    for k in range(n+1):
-        upper_k = calculate_upper_k(node2, seg1, k, n)
-        lower_p = calculate_lower_p(node1, node2, upper_k)
-        result += calculate_function_r(node1, node2, upper_k, lower_p)
-    return result
+    # print("Seg1: ", seg1)
+    # print("Seg2: ", seg2)
+    tangent = (seg2[1] - seg1[1]) / (seg2[0] - seg1[0])
+    if seg1[0] <= seg2[0]:
+        sign = 1
+    else:
+        sign = -1
+
+    eq = lambda val: tangent * (val - seg1[0]) + seg1[1]
+
+    for i in range(1, n+1):
+
+        diff = (node2[0] - node1[0], node2[1] - node1[1])
+        x_val = seg1[0] + (i / n) * sign
+        k = (x_val, eq(x_val))
+
+        # k = (seg1[0] + (i / n) * diff[0], node2[1] + (i/n) * diff[1])
+        #
+        dot_product = diff[0] * (k[0] - node1[0]) + diff[1] * (k[1] - node1[1])
+        if dot_product < 0:
+            target = (k[0] - node1[0], k[1] - node1[1])
+        elif dot_product <= 1:
+            target = (k[0] - (node1[0] + dot_product * diff[0]), k[1] - (node1[1] + dot_product * diff[1]))
+        else:
+            target = (k[0] - node2[0], k[1] - node2[1])
+
+
+        result += math.sqrt(target[0] ** 2 + target[1] ** 2)
+    return Decimal(result)
+        # print("Dot product: ", dot_product)
+    # result = 0
+    # for k in range(n+1):
+    #     upper_k = calculate_upper_k(node2, seg1, k, n)
+    #     lower_p = calculate_lower_p(node1, node2, upper_k)
+    #     result += calculate_function_r(node1, node2, upper_k, lower_p)
+    # return result
+
+
 
 nodes_length_dict ={}
 def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
@@ -246,7 +299,11 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
         c2 = beta * path_distance_minimization(node1, node2)
         nodes_length_dict[(node1, node2)] = c2
 
-    return c1 + c2
+    if (seg2[0] - seg1[0] > 1e-8):
+        c3 = distance_sum_minimization(node1, node2, seg1, seg2)
+        return Decimal(0.25) * c1 + Decimal(0.25) * c2 + Decimal(1) * c3
+
+    return Decimal(0.25) * c1 + Decimal(0.25) * c2
     # \
         # + gamma * distance_sum_minimization(node1, node2, seg1, seg2)
 
@@ -289,6 +346,7 @@ def initialize_graph_for_dijkstra(seg1, seg2):
         if id in intersections_nodes_idx:
             for other_node_id in nodes_ways[id]:
                 if other_node_id in intersections_nodes_idx:
+                    # print("Edge: (%d,%s)".format(id, other_node_id))
                     g.add_edge(node, nodes_id_to_location[other_node_id],
                                weight=cost_function(node, nodes_id_to_location[other_node_id], seg1, seg2, 1, 1, 1))
         # for idx in nearest_nodes[counter][:5]:
@@ -304,6 +362,14 @@ def initialize_graph_for_dijkstra(seg1, seg2):
 def run_dijkstra(graph, source, target):
     return nx.dijkstra_path(graph, source, target)
 
+#
+# def alternative_algo(current_location, segments):
+#     nodes = list(nodes_id_to_location.values())
+#     current_location = get_starting_node(current_location, nodes)
+#     path = []
+#     while segments:
+#         curr_segment = get_next_segment(segments)
+#         graph = initialize_ways_graph(curr_segment[0], curr_segment[1])
 
 def algorithm(current_location, segments):
     '''
@@ -315,23 +381,32 @@ def algorithm(current_location, segments):
     '''
     nodes = list(nodes_id_to_location.values())
     current_location = get_starting_node(current_location, nodes)
-    path = []
-    copied_nodes = deepcopy(nodes)
+    path = [current_location]
+    # copied_nodes = deepcopy(nodes)
     while segments:
+        # print("Current location node: ", location_to_id[(float(current_location[0]), float(current_location[1]))])
         print("Number of segments left: ", len(segments))
         next_segment = get_next_segment(segments)
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1])
-        copied_nodes.remove(current_location)
-        node_near_segment = get_segment_nearest_node(next_segment[1], copied_nodes)
-        copied_nodes.append(current_location)
-        path.append(run_dijkstra(graph, current_location, node_near_segment))
+        # copied_nodes.remove(current_location)
+        node_near_segment = get_segment_nearest_node(next_segment[1], nodes)
+        # copied_nodes.append(current_location)
+        dijkstra_path = run_dijkstra(graph, current_location, node_near_segment)
+        print("Current location: ", current_location)
+        print("Dijkstra Path: ", dijkstra_path)
+        for idx, point in enumerate(dijkstra_path):
+            if idx > 0:
+                path.append(point)
         current_location = node_near_segment
 
     print(path)
 
     float_path = []
     for point in path:
-        float_path.append([float(point[0][0]), float(point[0][1])])
+        node_id = location_to_id[(float(point[0]), float(point[1]))]
+        print("Node Id: ", node_id)
+        print("Node ways: ", nodes_ways[node_id])
+        float_path.append([float(point[0]), float(point[1])])
     return float_path
 
 

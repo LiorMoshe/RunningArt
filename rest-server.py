@@ -49,6 +49,12 @@ nodes = None
 converted_nodes = None
 required_average = None
 
+@app.route('/nodes', methods = ['GET'])
+# @auth.login_required
+@cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
+def send_nodes():
+    return jsonify({"nodes": convert_nodes_to_float(nodes)})
+
 
 @app.route('/polylines', methods = ['POST'])
 # @auth.login_required
@@ -67,10 +73,10 @@ def send_drawing():
             msg = base64.b64decode(imageStr)
             buf = io.BytesIO(msg)
             img = Image.open(buf)
+            lines = findExternalContours(img)
+            polyline = connect_polylines(lines)
         else:
-            img = text_to_image(request.json[TEXT_KEY])
-        lines = findExternalContours(img)
-        polyline = connect_polylines(lines)
+            polyline = text_to_polyline(request.json[TEXT_KEY])
 
 
         # TODO-Currently we scale the image only after we receive a full polyline of the image.
@@ -96,13 +102,13 @@ def send_drawing():
         connected_segments = preprocess_segments(decimal_polyline)
         print("Connected segments.")
         out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments)
-        return jsonify({"segments": geo_polyline, "result": out, "nodes": converted_nodes})
+        return jsonify({"segments": geo_polyline, "result": out})
 
 
 if __name__ == '__main__':
     # Get the intersection nodes.
 
-    ways = get_intersection_nodes_with_ways()
+    ways, nodes = get_intersection_nodes_with_ways()
     initialize_ways_graph(ways)
     required_average = compute_average_distance()
     app.run()

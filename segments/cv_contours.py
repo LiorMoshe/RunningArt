@@ -6,7 +6,7 @@ from skimage import img_as_float, color, morphology
 
 from segments.my_cv_contours import get_lat_long_dist
 from segments.distance_alignment import *
-from segments.utils import convert_coordinates
+from segments.utils import convert_coordinates, text_to_image, connect_polylines
 
 
 def _palette_is_grayscale(pil_image):
@@ -280,6 +280,16 @@ def polyline_averaging(polyline, average_dist=10):
 
     print("Output polyline: ", new_polyline)
     return new_polyline, changed
+
+def text_to_polyline(text):
+    polylines = []
+    for char in text:
+        img = text_to_image(char)
+        lines = findExternalContours(img)
+        polyline = connect_polylines(lines)
+        polylines.append(polyline)
+
+    return connect_polylines(polylines)
 
 
 
