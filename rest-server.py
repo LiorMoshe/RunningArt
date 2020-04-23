@@ -101,8 +101,9 @@ def send_drawing():
         decimal_polyline = convert_polyline_to_decimal(geo_polyline)
         connected_segments = preprocess_segments(decimal_polyline)
         print("Connected segments.")
-        out = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments)
-        return jsonify({"segments": geo_polyline, "result": out})
+        out, dijkstra_paths = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments)
+        print("Paths: ", dijkstra_paths)
+        return jsonify({"segments": geo_polyline, "result": out, "paths": dijkstra_paths})
 
 
 if __name__ == '__main__':
