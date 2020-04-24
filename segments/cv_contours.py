@@ -286,6 +286,7 @@ def text_to_polyline(text):
     for char in text:
         img = text_to_image(char)
         lines = findExternalContours(img)
+        print("Number of initial polylines: ", len(lines))
         polyline = connect_polylines(lines)
         polylines.append(polyline)
 

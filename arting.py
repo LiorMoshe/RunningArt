@@ -1,16 +1,13 @@
-import numpy as np
-from operator import itemgetter
-import overpy
-import dijkstra as dj
-import itertools
-from decimal import Decimal
-from copy import deepcopy
-import os.path
 import math
-from scipy import spatial
-from segments import cv_contours as geo
-from geopy.distance import geodesic
+import os.path
+from decimal import Decimal
+from operator import itemgetter
+
 import networkx as nx
+import numpy as np
+import overpy
+from geopy.distance import geodesic
+from scipy import spatial
 
 nearest_nodes = {}
 
@@ -49,6 +46,13 @@ def get_intersection_nodes_with_ways(current_location=[]):
     print("done ways")
     return result.ways, result.nodes
 
+def get_nodes():
+    locations = []
+    for idx in intersections_nodes_idx:
+        node_location = nodes_id_to_location[idx]
+        locations.append([float(node_location[0]), float(node_location[1])])
+    return locations
+
 def initialize_ways_graph(ways):
     for way in ways:
         way_nodes = way.nodes
@@ -80,18 +84,7 @@ def initialize_ways_graph(ways):
                                     nodes_ways[next_node.id] = []
                                 nodes_ways[next_node.id].append(node.id)
                             tmp_idx = tmp_idx + 1
-
-
-
-                # if next_node.id not in nodes_id_to_location:
-                #     nodes_id_to_location[next_node.id] = (next_node.lat, next_node.lon)
-                #     nodes_ways[next_node.id] = []
-                #
-                # nodes_ways[next_node.id].append(node.id)
-            # for other_node in copied_way:
-            #     if other_node.id not in nodes_ways[node.id]:
-            #         nodes_ways[node.id].append(other_node.id)
-            # copied_way.append(node)
+    get_mid_nodes()
 
 def cartesian(latitude, longitude, elevation = 0):
     # Convert to radians
@@ -212,8 +205,9 @@ def get_intersection_nodes(current_location=[]):
 
 
 def path_distance_minimization(point1, point2):
-    sub = np.subtract(point1, point2)
-    return (sub.item(0) ** 2 + sub.item(1) ** 2) ** Decimal(0.5)
+    return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+    # sub = np.subtract(point1, point2)
+    # return (sub.item(0) ** 2 + sub.item(1) ** 2) ** Decimal(0.5)
 
 
 def calculate_upper_k(node2, seg1, k, n):
@@ -249,6 +243,13 @@ def distance_sum_minimization(node1, node2, seg1, seg2, n=50):
     node2 = (float(node2[0]), float(node2[1]))
     seg1 = (float(seg1[0]), float(seg1[1]))
     seg2 = (float(seg2[0]), float(seg2[1]))
+    # print("Node 1: ", node1)
+    # print("Seg 1: ", seg1)
+
+    nodes_dist = math.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
+    seg_dist = math.sqrt((seg1[0] - seg2[0]) ** 2 + (seg1[1] - seg2[1]) ** 2)
+
+    # print("Nodes Dist: {0}, Segments Dist: {1}".format(nodes_dist, seg_dist))
     # print("Nodes length: ", math.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2))
     result = 0
     # print("Seg1: ", seg1)
@@ -279,31 +280,30 @@ def distance_sum_minimization(node1, node2, seg1, seg2, n=50):
 
 
         result += math.sqrt(target[0] ** 2 + target[1] ** 2)
-    return Decimal(result)
-        # print("Dot product: ", dot_product)
-    # result = 0
-    # for k in range(n+1):
-    #     upper_k = calculate_upper_k(node2, seg1, k, n)
-    #     lower_p = calculate_lower_p(node1, node2, upper_k)
-    #     result += calculate_function_r(node1, node2, upper_k, lower_p)
-    # return result
+
+    return Decimal((seg_dist / nodes_dist) * result)
 
 
 
 nodes_length_dict ={}
 def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
-    c1 = alpha * path_distance_minimization(node2, seg2)
+    node1 = gps_to_ecef_custom(float(node1[0]), float(node1[1]))
+    node2 = gps_to_ecef_custom(float(node2[0]), float(node2[1]))
+    seg1 = gps_to_ecef_custom(float(seg1[0]), float(seg1[1]))
+    seg2 = gps_to_ecef_custom(float(seg2[0]), float(seg2[1]))
+    # print("Node 1: ", node1)
+    c1 = Decimal(alpha * path_distance_minimization(node2, seg2))
     if (node1, node2) in nodes_length_dict.keys():
         c2 = nodes_length_dict[(node1,node2)]
     else:
-        c2 = beta * path_distance_minimization(node1, node2)
+        c2 = Decimal(beta * path_distance_minimization(node1, node2))
         nodes_length_dict[(node1, node2)] = c2
 
-    if (seg2[0] - seg1[0] > 1e-8):
+    if (abs(float(seg2[0]) - float(seg1[0])) > 1e-8):
         c3 = distance_sum_minimization(node1, node2, seg1, seg2)
-        return Decimal(0.25) * c1 + Decimal(0.25) * c2 + Decimal(1) * c3
+        return Decimal(0.25) * c1 + Decimal(4) * c3
 
-    return Decimal(0.25) * c1 + Decimal(0.25) * c2
+    return Decimal(0.25) * c1
     # \
         # + gamma * distance_sum_minimization(node1, node2, seg1, seg2)
 
@@ -346,30 +346,73 @@ def initialize_graph_for_dijkstra(seg1, seg2):
         if id in intersections_nodes_idx:
             for other_node_id in nodes_ways[id]:
                 if other_node_id in intersections_nodes_idx:
-                    # print("Edge: (%d,%s)".format(id, other_node_id))
                     g.add_edge(node, nodes_id_to_location[other_node_id],
                                weight=cost_function(node, nodes_id_to_location[other_node_id], seg1, seg2, 1, 1, 1))
-        # for idx in nearest_nodes[counter][:5]:
-        #     g.add_edge(node, nodes[idx], weight=cost_function(node, nodes[idx], seg1, seg2, 1, 1, 1))
         counter += 1
 
-    # for x in list(itertools.combinations(nodes, 2)):
-    #     g.add_edge(x[0], x[1], weight=cost_function(x[0], x[1], seg1, seg2, 1, 1, 1))
-    #     g.add_edge(x[1], x[0], weight=cost_function(x[1], x[0], seg1, seg2, 1, 1, 1))
     return g
 
 
 def run_dijkstra(graph, source, target):
     return nx.dijkstra_path(graph, source, target)
 
-#
-# def alternative_algo(current_location, segments):
-#     nodes = list(nodes_id_to_location.values())
-#     current_location = get_starting_node(current_location, nodes)
-#     path = []
-#     while segments:
-#         curr_segment = get_next_segment(segments)
-#         graph = initialize_ways_graph(curr_segment[0], curr_segment[1])
+def get_mid_nodes():
+    curr_id = -1
+
+    new_ids = {}
+
+    for node_id, neighbors_ids in nodes_ways.items():
+        if node_id in intersections_nodes_idx:
+            node_location = nodes_id_to_location[node_id]
+            for neighbor_id in neighbors_ids:
+                if neighbor_id in intersections_nodes_idx:
+                    other_node_loc = nodes_id_to_location[neighbor_id]
+                    mid_node = get_mid_point(node_location[0], node_location[1], other_node_loc[0], other_node_loc[1])
+                    nodes_id_to_location[curr_id] = (Decimal(mid_node[0]), Decimal(mid_node[1]))
+                    new_ids[curr_id] = [node_id, neighbor_id]
+                    curr_id -= 1
+
+    for i in range(-1, curr_id, -1):
+        nodes_ways[i] = new_ids[i]
+        intersections_nodes_idx.append(i)
+        nodes_ways[new_ids[i][0]].append(i)
+        nodes_ways[new_ids[i][1]].append(i)
+
+def get_mid_point(lat1, lon1, lat2, lon2):
+    lat1 = float(lat1) *  math.pi / 180
+    lat2 = float(lat2) * math.pi / 180
+    lon1 = float(lon1) *  math.pi / 180
+    lon2 = float(lon2) *  math.pi / 180
+    Bx = math.cos(lat2) * math.cos(lon2 - lon1)
+    By = math.cos(lat2) * math.sin(lon2 - lon1)
+    latMid = math.atan2(math.sin(lat1) + math.sin(lat2), math.sqrt((math.cos(lat1) + Bx) * (math.cos(lat1) + Bx) + By * By))
+    lonMid = lon1 + math.atan2(By, math.cos(lat1) + Bx)
+    return (latMid * 180 / math.pi, lonMid * 180 / math.pi)
+
+def get_k_closest_nodes(graph, current_location, segment, nodes, k=5):
+    segment_cartesian = gps_to_ecef_custom(float(segment[0]), float(segment[1]))
+    current_location_cartesian = gps_to_ecef_custom(float(current_location[0]), float(current_location[1]))
+    nodes_cartesian = [gps_to_ecef_custom(float(node[0]), float(node[1])) for node in nodes]
+    distance_array = np.array([path_distance_minimization(segment_cartesian, p) for p in nodes_cartesian])
+    distance_array = distance_array[distance_array != 0]
+    indices = np.argpartition(distance_array, k + 1)
+
+    min_total = float('inf')
+    min_path = []
+    min_node = None
+    for i in range(1, k + 1):
+        if nodes_cartesian[indices[i]] is not None and \
+                ((abs(current_location_cartesian[0] - nodes_cartesian[indices[i]][0]) > 1e-20)
+                 and (abs(current_location_cartesian[1] - nodes_cartesian[indices[i]][1]) > 1e-20)):
+            total, path = nx.single_source_dijkstra(graph, source=current_location, target=nodes[indices[i]])
+            if total < min_total:
+                min_total = total
+                min_path = path
+
+                min_node = nodes[indices[i]]
+
+    return min_path, min_node
+
 
 def algorithm(current_location, segments):
     '''
@@ -382,35 +425,45 @@ def algorithm(current_location, segments):
     nodes = list(nodes_id_to_location.values())
     current_location = get_starting_node(current_location, nodes)
     path = [current_location]
-    # copied_nodes = deepcopy(nodes)
+    cnt = 0
+    dijkstra_paths = []
     while segments:
-        # print("Current location node: ", location_to_id[(float(current_location[0]), float(current_location[1]))])
         print("Number of segments left: ", len(segments))
         next_segment = get_next_segment(segments)
+
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1])
-        # copied_nodes.remove(current_location)
-        node_near_segment = get_segment_nearest_node(next_segment[1], nodes)
-        # copied_nodes.append(current_location)
-        dijkstra_path = run_dijkstra(graph, current_location, node_near_segment)
-        print("Current location: ", current_location)
-        print("Dijkstra Path: ", dijkstra_path)
+        dijkstra_path, node_near_segment = get_k_closest_nodes(graph, current_location, next_segment[1], nodes, k=5)
+        print("Path Num: {0}, Path: {1}".format(cnt, dijkstra_path))
+        if cnt == 0:
+            dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path])
+        else:
+            dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path[1:]])
+
         for idx, point in enumerate(dijkstra_path):
             if idx > 0:
                 path.append(point)
         current_location = node_near_segment
+        cnt += 1
 
     print(path)
 
     float_path = []
     for point in path:
-        node_id = location_to_id[(float(point[0]), float(point[1]))]
-        print("Node Id: ", node_id)
-        print("Node ways: ", nodes_ways[node_id])
         float_path.append([float(point[0]), float(point[1])])
-    return float_path
+    return float_path, dijkstra_paths
 
 
+def gps_to_ecef_custom(lat, lon):
+    rad_lat = lat * (math.pi / 180.0)
+    rad_lon = lon * (math.pi / 180.0)
 
-if __name__=="__main__":
-    print()
-    # algorithm()
+    a = 6378137.0
+    finv = 298.257223563
+    f = 1 / finv
+    e2 = 1 - (1 - f) * (1 - f)
+    v = a / math.sqrt(1 - e2 * math.sin(rad_lat) * math.sin(rad_lat))
+
+    x = (v) * math.cos(rad_lat) * math.cos(rad_lon)
+    y = (v) * math.cos(rad_lat) * math.sin(rad_lon)
+
+    return (x, y)

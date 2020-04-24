@@ -114,6 +114,7 @@ def preprocess_segments(polyline):
     """
     connected_segments = []
 
-    for idx in range(len(polyline)):
+    for idx in range(len(polyline) - 1):
+        # if (idx < len(polyline) - 1):
         connected_segments.append((polyline[idx % len(polyline)], polyline[(idx + 1) % len(polyline)]))
     return connected_segments

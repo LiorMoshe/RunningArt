@@ -53,7 +53,8 @@ required_average = None
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_nodes():
-    return jsonify({"nodes": convert_nodes_to_float(nodes)})
+    return jsonify({"nodes": get_nodes()})
+    # return jsonify({"nodes": convert_nodes_to_float(nodes)})
 
 
 @app.route('/polylines', methods = ['POST'])
@@ -110,6 +111,7 @@ if __name__ == '__main__':
     # Get the intersection nodes.
 
     ways, nodes = get_intersection_nodes_with_ways()
+    # nodes = get_intersection_nodes()
     initialize_ways_graph(ways)
     required_average = compute_average_distance()
     app.run()
