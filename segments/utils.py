@@ -17,7 +17,6 @@ def get_lat_long_dist(lat1, lon1, lat2, lon2):
 
 def convert_coordinates(polyline, initial_pos):
     '''
-    TODO - Move this elsewhere.
     Given the polylines given in the output of our algorithm and an initial geocentric location
     on the map. Return a new set of polylines in geocentric location.
     Apply scaling if necessary.
@@ -41,13 +40,8 @@ def convert_coordinates(polyline, initial_pos):
         else:
             x_diff = point[0] - current_xy[0]
             y_diff = -(point[1] - current_xy[1])
-
-
             lat_diff = 1 / 111111 * y_diff
-            print("Previous map: ", previous_map)
-            print("Current geo: ", current_geo)
             long_diff = 1 / (111111 * math.cos(current_geo[0] * math.pi / 180)) * x_diff
-
             geo_pos = (current_geo[0] + lat_diff, current_geo[1] + long_diff)
             geo_polyline.append(geo_pos)
             current_geo = geo_pos

@@ -53,7 +53,7 @@ required_average = None
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_nodes():
-    return jsonify({"nodes": get_nodes()})
+    return jsonify({"nodes_map": get_nodes_map()})
     # return jsonify({"nodes": convert_nodes_to_float(nodes)})
 
 
@@ -82,6 +82,7 @@ def send_drawing():
 
         # TODO-Currently we scale the image only after we receive a full polyline of the image.
         # Convert the format from a single polyline to a set of polylines.
+        polyline = remove_redundancies(polyline)
         polyline = scale_route_to_distance(distance, polyline, average_distance=required_average)
 
 
@@ -102,14 +103,14 @@ def send_drawing():
         decimal_polyline = convert_polyline_to_decimal(geo_polyline)
         connected_segments = preprocess_segments(decimal_polyline)
         print("Connected segments.")
-        out, dijkstra_paths = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments)
+        out, dijkstra_paths = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, threshold=required_average)
+        updated_paths = append_ids_to_paths(dijkstra_paths)
         print("Paths: ", dijkstra_paths)
-        return jsonify({"segments": geo_polyline, "result": out, "paths": dijkstra_paths})
+        return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths})
 
 
 if __name__ == '__main__':
     # Get the intersection nodes.
-
     ways, nodes = get_intersection_nodes_with_ways()
     # nodes = get_intersection_nodes()
     initialize_ways_graph(ways)

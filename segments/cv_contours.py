@@ -261,22 +261,23 @@ def polyline_averaging(polyline, average_dist=10):
             new_polyline.append(idx_to_center[point_to_idx[point]])
 
 
-    locations = set(new_polyline)
-    was_visited = {location: False for location in locations}
-    visited_twice = {location: False for location in locations}
-    indices_to_be_removed = []
-    for idx, point in enumerate(new_polyline):
-        if was_visited[point]:
-            if all(value for value in was_visited.values()):
-                if any(value for value in visited_twice.values()):
-                    indices_to_be_removed = [idx] + indices_to_be_removed
-                else:
-                    visited_twice[point] = True
-        else:
-            was_visited[point] = True
-
-    for idx in indices_to_be_removed:
-        del new_polyline[idx]
+    # Doesn't work for some weird reason.
+    # locations = set(new_polyline)
+    # was_visited = {location: False for location in locations}
+    # visited_twice = {location: False for location in locations}
+    # indices_to_be_removed = []
+    # for idx, point in enumerate(new_polyline):
+    #     if was_visited[point]:
+    #         if all(value for value in was_visited.values()):
+    #             if any(value for value in visited_twice.values()):
+    #                 indices_to_be_removed = [idx] + indices_to_be_removed
+    #             else:
+    #                 visited_twice[point] = True
+    #     else:
+    #         was_visited[point] = True
+    #
+    # for idx in indices_to_be_removed:
+    #     del new_polyline[idx]
 
     print("Output polyline: ", new_polyline)
     return new_polyline, changed

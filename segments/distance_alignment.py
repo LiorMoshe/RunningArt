@@ -84,6 +84,26 @@ def scale_route_to_distance(target_distance, polyline, average_distance=None):
 
     return adjusted_polyline
 
+def remove_redundancies(polyline):
+    """
+    Remove redundancies in our polyline. We won't return to a given point in the polyline if we already
+    passed over all the points in the polyline.
+    :return:
+    """
+    adjusted_polyline = []
+    is_visited = {point: False for point in set(polyline)}
+    for point in polyline:
+        if not is_visited[point]:
+            is_visited[point] = True
+        elif all(value for value in is_visited.values()):
+            break
+
+        adjusted_polyline.append(point)
+
+    return adjusted_polyline
+
+
+
 if __name__=="__main__":
     first = (0,0)
     second = (2,-2)
