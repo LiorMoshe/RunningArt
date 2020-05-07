@@ -11,6 +11,7 @@ from scipy import spatial
 import logging
 import time
 from segments.utils import get_lat_long_dist
+from osm.bounding_box_calculation import *
 
 
 
@@ -39,7 +40,7 @@ nearest_nodes = {}
 
 # Maps the way
 nodes_ways = {}
-intersections_nodes_idx = [286643475, 317214411, 357500272, 357545243, 366653136, 799417137, 286643440, 286643458, 286643460, 366651300, 366652380, 366652746, 366653067, 366653799, 1571764097, 1628430688, 1628430723, 4170418930, 366652962, 540420234, 540420265, 540420291, 366654065, 366654066, 540419840, 2470061832, 406399586, 540419838, 540419855, 1574692678, 2294948482, 540419958, 286643465, 286741983, 549271109, 1574692741, 1574692746, 1574692918, 286542239, 286542525, 286543443, 286754329, 496176171, 1628430716, 1672351167, 4582891013, 496176315, 496176455, 799417353, 366653165, 366653693, 1628430719, 540421284, 540421320, 1628430692, 286643451, 357536696, 366651462, 286643444, 366651463, 357538387, 1672351158, 2108063257, 357538922, 357536485, 366651303, 366651349, 496176172, 540420824, 366652262, 366652516, 496176174, 2139244077, 2470061834, 1628430689, 1628430687, 1628430710, 1628430720, 2470061831, 412522566, 496176177, 2470061851, 2469958099, 286643432, 4833025980, 2139244073, 7052661053, 514357166, 366649858, 384695042, 1995922116, 1995922128, 1995922151, 2470061837, 3999875641]
+
 # Maps node is to location
 nodes_id_to_location = {}
 
@@ -76,13 +77,6 @@ def get_intersection_nodes_with_ways(current_location=[]):
     print("done ways")
     return result.ways, result.nodes
 
-def get_nodes():
-    locations = []
-    for idx in intersections_nodes_idx:
-        node_location = nodes_id_to_location[idx]
-        locations.append([float(node_location[0]), float(node_location[1])])
-    return locations
-
 def get_nodes_map():
     if len(float_nodeid_to_loc) != 0:
         return float_nodeid_to_loc
@@ -91,13 +85,13 @@ def get_nodes_map():
         float_nodeid_to_loc[id] = [float(node_loc[0]), float(node_loc[1])]
     return float_nodeid_to_loc
 
-def initialize_ways_graph(ways):
+def initialize_ways_graph(ways, intersections_nodes):
     for way in ways:
         way_nodes = way.nodes
         # copied_way = deepcopy(way_nodes)
         for idx, node in enumerate(way_nodes):
             # copied_way.remove(node)
-            if node.id in intersections_nodes_idx:
+            if node.id in intersections_nodes:
                 if node.id not in nodes_id_to_location:
                     nodes_id_to_location[node.id] = (node.lat, node.lon)
                     location_to_id[(float(node.lat), float(node.lon))] = node.id
@@ -105,7 +99,7 @@ def initialize_ways_graph(ways):
                         nodes_ways[node.id] = []
                 if idx < len(way_nodes) - 1:
                     next_node = way_nodes[idx + 1]
-                    if next_node.id in intersections_nodes_idx:
+                    if next_node.id in intersections_nodes:
                         nodes_ways[node.id].append(next_node.id)
                         if next_node.id not in nodes_ways.keys():
                             nodes_ways[next_node.id] = []
@@ -115,14 +109,15 @@ def initialize_ways_graph(ways):
                         found = False
                         while tmp_idx < len(way_nodes) - 1 and found == False :
                             next_node = way_nodes[tmp_idx + 1]
-                            if next_node.id in intersections_nodes_idx:
+                            if next_node.id in intersections_nodes:
                                 found=True
                                 nodes_ways[node.id].append(next_node.id)
                                 if next_node.id not in nodes_ways.keys():
                                     nodes_ways[next_node.id] = []
                                 nodes_ways[next_node.id].append(node.id)
                             tmp_idx = tmp_idx + 1
-    get_mid_nodes()
+    get_mid_nodes(intersections_nodes)
+    print(nodes_ways)
     # get_mid_nodes()
 
 def cartesian(latitude, longitude, elevation = 0):
@@ -403,21 +398,24 @@ def get_next_segment(segments, leftovers):
         return seg
 
 
-def compute_average_distance():
+def compute_average_distance(intersections_nodes):
     """
     Given the available ways from each node, compute the total average distance.
     :return:
     """
     total_roads = 0
     total_dist = 0
+    print(nodes_ways.items())
     for node_id, available_ways in nodes_ways.items():
-        if node_id in intersections_nodes_idx:
+        if node_id in intersections_nodes:
             node = nodes_id_to_location[node_id]
             for other_node_id in available_ways:
-                if other_node_id in intersections_nodes_idx:
+                if other_node_id in intersections_nodes:
                     other_node = nodes_id_to_location[other_node_id]
                     total_dist += geodesic(node, other_node).meters
                     total_roads += 1
+    print(total_dist)
+    print(total_roads)
     print(total_dist / total_roads)
     return total_dist / total_roads
 
@@ -425,7 +423,7 @@ def get_segment_nearest_node(segment, nodes):
     return min([[p, path_distance_minimization(segment, p)] for p in nodes], key=itemgetter(1))[0]
 
 
-def initialize_graph_for_dijkstra(seg1, seg2):
+def initialize_graph_for_dijkstra(seg1, seg2, intersections_nodes_idx):
     g = nx.DiGraph()
     counter = 0
     for id, node in nodes_id_to_location.items():
@@ -444,7 +442,7 @@ def run_dijkstra(graph, source, target):
 
 
 minus_id = -1
-def get_mid_nodes():
+def get_mid_nodes(intersections_nodes):
     global minus_id
     initial_id = minus_id
     curr_id = minus_id
@@ -454,10 +452,10 @@ def get_mid_nodes():
 
 
     for node_id, neighbors_ids in nodes_ways.items():
-        if node_id in intersections_nodes_idx:
+        if node_id in intersections_nodes:
             node_location = nodes_id_to_location[node_id]
             for neighbor_id in neighbors_ids:
-                if neighbor_id in intersections_nodes_idx:
+                if neighbor_id in intersections_nodes:
                     other_node_loc = nodes_id_to_location[neighbor_id]
                     mid_node = get_mid_point(node_location[0], node_location[1], other_node_loc[0], other_node_loc[1])
                     min_node_decimal = (Decimal(mid_node[0]), Decimal(mid_node[1]))
@@ -472,7 +470,7 @@ def get_mid_nodes():
 
     for i in range(initial_id, curr_id, -1):
         nodes_ways[i] = new_ids[i]
-        intersections_nodes_idx.append(i)
+        intersections_nodes.append(i)
 
 
         nodes_ways[new_ids[i][0]].append(i)
@@ -590,7 +588,7 @@ def append_ids_to_paths(dijkstra_paths):
         updated_paths.append(updated_path)
     return updated_paths
 
-def algorithm(current_location, segments, threshold=10):
+def algorithm(current_location, segments, intersections_nodes_idx, threshold=10):
     '''
     Executes dijkstra's algorithm based on the given nodes.
     Throughout the main loop of the algorithm we assume that the given segment is in cartesian coordinates.
@@ -607,11 +605,14 @@ def algorithm(current_location, segments, threshold=10):
     leftovers =[]
     total_times_init = 0.0
     total_times_opt = 0.0
+    print(len(segments))
     while segments or leftovers:
         print("Number of segments left: ", len(segments))
         next_segment = get_next_segment(segments, leftovers)
+        print("lior")
         start_time = time.time()
-        graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1])
+        graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1], intersections_nodes_idx)
+        print("moshe")
         total_times_init += time.time() - start_time
         # print("--- %s Initialization seconds ---" % (time.time() - start_time))
         seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
@@ -619,6 +620,7 @@ def algorithm(current_location, segments, threshold=10):
 
         start_time = time.time()
         dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes, k=5,seg_length=seg_length)
+        print("oh no")
         total_times_opt += time.time() - start_time
         print("Dijkstra path: ", dijkstra_path)
 

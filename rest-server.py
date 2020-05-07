@@ -8,6 +8,7 @@ from flask_httpauth import HTTPBasicAuth
 from arting import *
 from segments.cv_contours import *
 from segments.utils import *
+from osm.bounding_box_calculation import *
 
 #example client request: curl -u running:art -F "file=@valtho.jpeg" -i http://localhost:5000/polylines
 
@@ -61,12 +62,18 @@ def send_nodes():
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_drawing():
+        # Get the intersection nodes.
     # try:
 
         initial_pos = request.json[POSITION_KEY]
         distance = request.json[DISTANCE_KEY]
         print(initial_pos)
-        print("Received distance: ", distance)
+        print("Received distance: ", distance/1000)
+        ways, nodes = intersection_nodes_with_ways(initial_pos, distance/1000)
+        intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, distance/1000)
+        initialize_ways_graph(ways, intersections_nodes_idx)
+        required_average = compute_average_distance(intersections_nodes_idx)
+
 
         # Parse base64 image url.
         if IMAGE_KEY in request.json:
@@ -78,7 +85,6 @@ def send_drawing():
             polyline = connect_polylines(lines)
         else:
             polyline = text_to_polyline(request.json[TEXT_KEY])
-
 
         # TODO-Currently we scale the image only after we receive a full polyline of the image.
         # Convert the format from a single polyline to a set of polylines.
@@ -95,24 +101,21 @@ def send_drawing():
 
 
         geo_polyline = convert_coordinates(polyline, initial_pos)
-
         # Currently we don't connect any letters at all.
         # geo_lines = connect_letters(initial_pos, geo_lines)
 
         # Currently we do not use the algorithm.
         decimal_polyline = convert_polyline_to_decimal(geo_polyline)
+
         connected_segments = preprocess_segments(decimal_polyline)
         print("Connected segments.")
-        out, dijkstra_paths = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, threshold=required_average)
+        print(connected_segments,len(connected_segments))
+        out, dijkstra_paths = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, intersections_nodes_idx, threshold=required_average)
         updated_paths = append_ids_to_paths(dijkstra_paths)
         print("Paths: ", dijkstra_paths)
+        print(initial_pos)
         return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths})
 
 
 if __name__ == '__main__':
-    # Get the intersection nodes.
-    ways, nodes = get_intersection_nodes_with_ways()
-    # nodes = get_intersection_nodes()
-    initialize_ways_graph(ways)
-    required_average = compute_average_distance()
     app.run()
