@@ -61,8 +61,6 @@ def send_nodes():
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_drawing():
-    # try:
-
         initial_pos = request.json[POSITION_KEY]
         distance = request.json[DISTANCE_KEY]
         print(initial_pos)
@@ -87,13 +85,7 @@ def send_drawing():
 
 
         # Perform averaging to remove redundant points.
-        while True:
-            print("Averaging")
-            polyline, changed = polyline_averaging(polyline, average_dist=required_average)
-            if not changed:
-                break
-
-
+        polyline = polyline_averaging(polyline, average_dist=required_average)
         geo_polyline = convert_coordinates(polyline, initial_pos)
 
         # Currently we don't connect any letters at all.

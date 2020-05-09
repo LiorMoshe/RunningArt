@@ -202,64 +202,77 @@ def polyline_averaging(polyline, average_dist=10):
     center_to_idx = {}
     center_to_participants = {}
     point_to_idx = {}
-    changed = False
+    changed = True
 
     curr_idx = 0
     print("Input polyline: ", polyline)
-    # for polyline in segments:
-    seen = []
-    for point in polyline:
-        if point not in seen:
-            seen.append(point)
-            closest = None
-            closest_dist = float('inf')
+    while changed:
+        changed = False
+        seen = []
+        for point in polyline:
+            if point not in seen:
+                # Add the point to the list of seen points.
+                seen.append(point)
+                closest = None
+                closest_dist = float('inf')
 
-            for center in centers:
-                dist = math.sqrt((center[0] - point[0]) ** 2 + (center[1] - point[1]) ** 2)
-                if dist < closest_dist:
-                    closest = center
-                    closest_dist = dist
+                existing_center = None
+                if point in point_to_idx:
+                    existing_center = idx_to_center[point_to_idx[point]]
 
-            if closest is None or closest_dist > average_dist:
-                centers.append(point)
-                center_to_participants[point] = 1
 
-                idx_to_center[curr_idx] = point
-                center_to_idx[point] = curr_idx
-                point_to_idx[point] = curr_idx
+                # Find the closest center to this point.
+                for center in centers:
+                    dist = math.sqrt((center[0] - point[0]) ** 2 + (center[1] - point[1]) ** 2)
+                    if dist < closest_dist:
+                        closest = center
+                        closest_dist = dist
 
-                # Increment the idx.
-                curr_idx += 1
-            elif closest_dist > 1:
-                # There is some change to the centers, notify.
-                # print("Changed")
-                changed = True
+                # If there is no closest center or the average distance is large, allocate a new center.
+                if closest is None or closest_dist > average_dist:
+                    centers.append(point)
+                    center_to_participants[point] = 1
 
-                idx = center_to_idx[closest]
-                del idx_to_center[idx]
-                centers.remove(closest)
-                n = center_to_participants[closest]
-                new_center = ((n / (n+1)) * closest[0] + (1 / (n+1)) * point[0],
-                              (n / (n+1)) * closest[1] + (1 / (n+1)) * point[1])
-                del center_to_participants[closest]
-                center_to_participants[new_center] = n+1
-                centers.append(new_center)
-                idx_to_center[idx] = new_center
-                point_to_idx[point] = idx
-                center_to_idx[new_center] = idx
-            else:
-                point_to_idx[point] = center_to_idx[closest]
+                    idx_to_center[curr_idx] = point
+                    center_to_idx[point] = curr_idx
+                    point_to_idx[point] = curr_idx
+
+                    # Increment the idx.
+                    curr_idx += 1
+                elif closest_dist > 1 and existing_center != closest:
+                    # There is some change to the centers, notify, update the center by adding the point to the averaging.
+                    changed = True
+                    idx = center_to_idx[closest]
+                    del idx_to_center[idx]
+                    centers.remove(closest)
+                    n = center_to_participants[closest]
+                    new_center = ((n / (n+1)) * closest[0] + (1 / (n+1)) * point[0],
+                                  (n / (n+1)) * closest[1] + (1 / (n+1)) * point[1])
+                    del center_to_participants[closest]
+                    center_to_participants[new_center] = n+1
+                    centers.append(new_center)
+                    idx_to_center[idx] = new_center
+                    point_to_idx[point] = idx
+                    center_to_idx[new_center] = idx
+                else:
+                    point_to_idx[point] = center_to_idx[closest]
 
     new_polyline = []
+    orig_cnt = 0
+    new_cnt = 0
     for point in polyline:
+        print("Index: {0} Point: {1}".format(orig_cnt, point))
         prev_point = None
         if len(new_polyline) > 0:
             prev_point = new_polyline[len(new_polyline) - 1]
 
         current_center = idx_to_center[point_to_idx[point]]
         if current_center != prev_point:
-            new_polyline.append(idx_to_center[point_to_idx[point]])
+            print("Adding center: {0} at index: {1}".format(current_center, new_cnt))
+            new_polyline.append(current_center)
+            new_cnt += 1
 
+        orig_cnt+= 1
 
     # Doesn't work for some weird reason.
     # locations = set(new_polyline)
@@ -280,7 +293,7 @@ def polyline_averaging(polyline, average_dist=10):
     #     del new_polyline[idx]
 
     print("Output polyline: ", new_polyline)
-    return new_polyline, changed
+    return new_polyline
 
 def text_to_polyline(text):
     polylines = []
@@ -332,9 +345,13 @@ def connect_letters(starting_location, segments):
 
 if __name__=="__main__":
 
-    image = Image.open('pil_text_font_b.png')
-
-    lines = find_thick_contours(image)
+    # image = Image.open('pil_text_font_b.png')
+    #
+    # lines = find_thick_contours(image)
+    # img = text_to_image('B')
+    #     # lines = findExternalContours(img)
+    lines = text_to_polyline("G")
+    lines = [lines]
     # lines = findExternalContours(image)
 
     print("Iterating over polylines: ", len(lines))

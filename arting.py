@@ -336,9 +336,6 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
     s_node_id = location_to_id[(float(node2[0]), float(node2[1]))]
     node1 = gps_to_ecef_custom(float(node1[0]), float(node1[1]))
     node2 = gps_to_ecef_custom(float(node2[0]), float(node2[1]))
-    # seg1 = gps_to_ecef_custom(float(seg1[0]), float(seg1[1]))
-    # seg2 = gps_to_ecef_custom(float(seg2[0]), float(seg2[1]))
-    # print("Node 1: ", node1)
     c1 = Decimal(alpha * path_distance_minimization(node2, seg2))
     # if (node1, node2) in nodes_length_dict.keys():
     #     c2 = nodes_length_dict[(node1,node2)]
@@ -354,7 +351,6 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
 
     first_slope = (node2[1] - node1[1]) / (node2[0] - node1[0])
     second_slope = (seg2[1] - seg1[1]) / (seg2[0] - seg1[0])
-
     angle = math.atan(abs((second_slope - first_slope) / (1 + second_slope*first_slope))) * 180 / math.pi
 
     # if (first_slope * second_slope < 0):
@@ -364,8 +360,8 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
     if angle > 35:
         multiplier = angle
 
-    print("Computing cost of nodes: {0} and {1}, slope mult: {2} Angle:  {3}, Area: {4}, Total Computed Area Factor: {5}".
-          format(f_node_id, s_node_id, first_slope * second_slope, angle, float(c3), multiplier * float(c3)))
+    # print("Computing cost of nodes: {0} and {1}, slope mult: {2} Angle:  {3}, Area: {4}, Total Computed Area Factor: {5}".
+    #       format(f_node_id, s_node_id, first_slope * second_slope, angle, float(c3), multiplier * float(c3)))
 
     logging.info("Node1: (x: {0}, y: {1}), Node2: (x: {2}, y: {3})".format(node1[0], node1[1], node2[0], node2[1]))
     logger.info("Computing cost of nodes: {0} and {1}, slope mult: {2} Angle:  {3}, Area: {4}, Total Computed: {5}"
@@ -530,14 +526,14 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
 
             path_len = compute_path_length(path)
 
-            print("Distance diff: ", path_len - seg_length)
+            # print("Distance diff: ", path_len - seg_length)
             total = total * Decimal(max(abs(path_len - seg_length), 1))
 
             logging.info("After factoring node {0} has total cost of {1}, min total: {2}".format(node_id, total, min_total))
 
-            print("Distance of path: {0}, Distance of segment: {1}".format(path_len, seg_length))
+            # print("Distance of path: {0}, Distance of segment: {1}".format(path_len, seg_length))
             # print("Node compared: ", nodes[indices[i]])
-            print("Node Id: {0} Index: {1} Comparing, total: {2}, min total: {3}, length of path: {4}".format(node_id,indices[i],total, min_total, len(path)))
+            # print("Node Id: {0} Index: {1} Comparing, total: {2}, min total: {3}, length of path: {4}".format(node_id,indices[i],total, min_total, len(path)))
             if total < min_total:
                 logging.info("Setting ")
                 min_total = total
@@ -547,8 +543,8 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
 
     logging.info("Chose minimal node: {0} with cost {1}".format(min_node_id, min_total))
 
-    print("Chosen cost of path: ", min_total)
-    print("Min node: ", min_node)
+    # print("Chosen cost of path: ", min_total)
+    # print("Min node: ", min_node)
     return min_path, min_node
 
 def compute_path_length(path):
@@ -605,35 +601,22 @@ def algorithm(current_location, segments, threshold=10):
     cnt = 0
     dijkstra_paths = []
     leftovers =[]
-    total_times_init = 0.0
-    total_times_opt = 0.0
     while segments or leftovers:
         print("Number of segments left: ", len(segments))
         next_segment = get_next_segment(segments, leftovers)
-        start_time = time.time()
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1])
-        total_times_init += time.time() - start_time
-        # print("--- %s Initialization seconds ---" % (time.time() - start_time))
         seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
                                (next_segment[0][1] - next_segment[1][1]) ** 2)
 
-        start_time = time.time()
         dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes, k=5,seg_length=seg_length)
-        total_times_opt += time.time() - start_time
-        print("Dijkstra path: ", dijkstra_path)
-
-
-        length = compute_path_length(dijkstra_path)
-
-
         # if ((seg_length - length) > threshold):
         #     print("PASSED LENGTH TEST")
         #     leftovers.append(compute_remaining_segment(next_segment, length, seg_length))
 
-        print("Path Length: {0}, Segment Length: {1}".format(length, seg_length))
+        # print("Path Length: {0}, Segment Length: {1}".format(length, seg_length))
         logger.info("Path Num: {0}, Path: {1}".format(cnt, dijkstra_path))
 
-        print("Path Num: {0}, Path: {1}".format(cnt, dijkstra_path))
+        # print("Path Num: {0}, Path: {1}".format(cnt, dijkstra_path))
         if cnt == 0:
             dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path])
         else:
@@ -646,19 +629,13 @@ def algorithm(current_location, segments, threshold=10):
         cnt += 1
     print(path)
 
-    print("Init avg: ", total_times_init / cnt)
-    print("Total dijkstra avg: ", total_times_opt / cnt)
     float_path = []
     for point in path:
         float_path.append([float(point[0]), float(point[1])])
     global  total_time
-    print("Total time for conversion: ", total_time)
     return float_path, dijkstra_paths
 
-total_time = 0.0
 def gps_to_ecef_custom(lat, lon):
-    global total_time
-    start_time = time.time()
     rad_lat = lat * (math.pi / 180.0)
     rad_lon = lon * (math.pi / 180.0)
 
@@ -671,7 +648,6 @@ def gps_to_ecef_custom(lat, lon):
     x = (v) * math.cos(rad_lat) * math.cos(rad_lon)
     y = (v) * math.cos(rad_lat) * math.sin(rad_lon)
 
-    total_time += time.time() - start_time
     return (x, y)
 
 if __name__=="__main__":

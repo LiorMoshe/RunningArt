@@ -75,8 +75,8 @@ def scale_route_to_distance(target_distance, polyline, average_distance=None):
                 adjusted_polyline.append(new_point)
                 adjusted_idx += 1
 
-            remaining_dist = target_dist - int(math.floor(num_points)) * average_distance
-            if remaining_dist > 1:
+            remaining_dist = 0 if int(math.floor(num_points)) == 0 else target_dist - int(math.floor(num_points)) * average_distance
+            if remaining_dist > 0:
                 adjusted_polyline.append(compute_target_from_new_source(prev_point, polyline[idx], adjusted_polyline[adjusted_idx - 1], remaining_dist))
                 adjusted_idx += 1
 
@@ -86,18 +86,22 @@ def scale_route_to_distance(target_distance, polyline, average_distance=None):
 
 def remove_redundancies(polyline):
     """
-    Remove redundancies in our polyline. We won't return to a given point in the polyline if we already
-    passed over all the points in the polyline.
+    Remove redundancies in our polyline. Don't pass over the same road twice if we visited all roads in the polyline.
     :return:
     """
     adjusted_polyline = []
     is_visited = {point: False for point in set(polyline)}
-    for point in polyline:
+    visited_edges = []
+    for idx, point in enumerate(polyline):
+        current_edge = None
+        if idx > 0:
+            current_edge = set([polyline[idx-1], point])
         if not is_visited[point]:
             is_visited[point] = True
-        elif all(value for value in is_visited.values()):
+        elif all(value for value in is_visited.values()) and current_edge in visited_edges:
             break
 
+        visited_edges.append(current_edge)
         adjusted_polyline.append(point)
 
     return adjusted_polyline
