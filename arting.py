@@ -118,7 +118,6 @@ def initialize_ways_graph(ways, intersections_nodes):
                             tmp_idx = tmp_idx + 1
     intersections_nodes = get_mid_nodes(intersections_nodes)
     return intersections_nodes
-    # get_mid_nodes()
 
 def cartesian(latitude, longitude, elevation = 0):
     # Convert to radians

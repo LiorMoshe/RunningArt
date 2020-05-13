@@ -200,9 +200,6 @@ def get_interections(ways):
                 nodes.append(node.id)
     return nodes
 
-#a = local_convert()
-# get_interections(a)
-# # print(a)
 def intersection_nodes(location_node,km_distance):
     south_lat, west_long, north_lat, east_long = get_boundng_box_intersection_nodes(location_node, km_distance)
     box = '{0},{1},{2},{3}'.format(west_long, south_lat, east_long, north_lat)
