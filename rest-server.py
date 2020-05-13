@@ -69,11 +69,12 @@ def send_drawing():
         distance = request.json[DISTANCE_KEY]
         print(initial_pos)
         print("Received distance: ", distance/1000)
-        ways, nodes = intersection_nodes_with_ways(initial_pos, distance/1000)
-        intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, distance/1000)
-        initialize_ways_graph(ways, intersections_nodes_idx)
-        required_average = compute_average_distance(intersections_nodes_idx)
+        ways,intersections_nodes_idx = local_convert(initial_pos, distance/1000)
+        intersections_nodes_idx = list(intersections_nodes_idx)
+        print(intersections_nodes_idx)
+        intersections_nodes_idx = initialize_ways_graph(ways, intersections_nodes_idx)
 
+        required_average = compute_average_distance(intersections_nodes_idx)
 
         # Parse base64 image url.
         if IMAGE_KEY in request.json:

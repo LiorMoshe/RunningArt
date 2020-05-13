@@ -93,7 +93,7 @@ def initialize_ways_graph(ways, intersections_nodes):
             # copied_way.remove(node)
             if node.id in intersections_nodes:
                 if node.id not in nodes_id_to_location:
-                    nodes_id_to_location[node.id] = (node.lat, node.lon)
+                    nodes_id_to_location[node.id] = (Decimal(node.lat), Decimal(node.lon))
                     location_to_id[(float(node.lat), float(node.lon))] = node.id
                     if node.id not in nodes_ways.keys():
                         nodes_ways[node.id] = []
@@ -116,8 +116,8 @@ def initialize_ways_graph(ways, intersections_nodes):
                                     nodes_ways[next_node.id] = []
                                 nodes_ways[next_node.id].append(node.id)
                             tmp_idx = tmp_idx + 1
-    get_mid_nodes(intersections_nodes)
-    print(nodes_ways)
+    intersections_nodes = get_mid_nodes(intersections_nodes)
+    return intersections_nodes
     # get_mid_nodes()
 
 def cartesian(latitude, longitude, elevation = 0):
@@ -240,6 +240,7 @@ def get_intersection_nodes(current_location=[]):
 
 def path_distance_minimization(point1, point2):
     return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+
     # sub = np.subtract(point1, point2)
     # return (sub.item(0) ** 2 + sub.item(1) ** 2) ** Decimal(0.5)
 
@@ -450,7 +451,6 @@ def get_mid_nodes(intersections_nodes):
     new_ids = {}
     mid_location_to_id = {}
 
-
     for node_id, neighbors_ids in nodes_ways.items():
         if node_id in intersections_nodes:
             node_location = nodes_id_to_location[node_id]
@@ -467,21 +467,20 @@ def get_mid_nodes(intersections_nodes):
     for loc, id in mid_location_to_id.items():
         nodes_id_to_location[id] = loc
         location_to_id[(loc[0], loc[1])] = id
-
     for i in range(initial_id, curr_id, -1):
         nodes_ways[i] = new_ids[i]
         intersections_nodes.append(i)
 
-
         nodes_ways[new_ids[i][0]].append(i)
-
         if new_ids[i][1] in nodes_ways[new_ids[i][0]]:
             nodes_ways[new_ids[i][0]].remove(new_ids[i][1])
 
         nodes_ways[new_ids[i][1]].append(i)
         if new_ids[i][0] in nodes_ways[new_ids[i][1]]:
             nodes_ways[new_ids[i][1]].remove(new_ids[i][0])
+    print("done")
     minus_id = curr_id
+    return intersections_nodes
 
 def get_mid_point(lat1, lon1, lat2, lon2):
     lat1 = float(lat1) *  math.pi / 180
@@ -620,7 +619,6 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
 
         start_time = time.time()
         dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes, k=5,seg_length=seg_length)
-        print("oh no")
         total_times_opt += time.time() - start_time
         print("Dijkstra path: ", dijkstra_path)
 
