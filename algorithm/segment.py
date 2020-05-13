@@ -1,9 +1,15 @@
 
-class Segment(object):
+class SegmentHistory(object):
 
     def __init__(self, start, end):
         self.start = start
         self.end = end
+
+    def set_start_node(self, start_node):
+        self.start_node = start_node
+
+    def set_end_node(self, end_node):
+        self.end_node = end_node
 
     def is_reverse(self, other):
         """

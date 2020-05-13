@@ -10,7 +10,7 @@ import overpy
 from geopy.distance import geodesic
 from scipy import spatial
 import time
-from algorithm.segment import Segment
+from algorithm.segment import SegmentHistory
 
 
 # formatter = logging.Formatter('%(message)s')
@@ -24,7 +24,7 @@ def setup_logger(name, log_file, level=logging.INFO):
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    handler = logging.FileHandler(log_file)
+    handler = logging.FileHandler(log_file,mode='w')
     # handler.setFormatter(formatter)
 
     logger = logging.getLogger(name)
@@ -636,7 +636,8 @@ def algorithm(current_location, segments, threshold=10):
         print("Number of segments left: ", len(segments))
         logging.info("Number of segments left: {0}".format(len(segments)))
         next_segment = get_next_segment(segments, leftovers)
-        segment = Segment(next_segment[0], next_segment[1])
+        segment = SegmentHistory(next_segment[0], next_segment[1])
+        segment.set_start_node(current_location)
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1])
         seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
                                (next_segment[0][1] - next_segment[1][1]) ** 2)
@@ -647,10 +648,12 @@ def algorithm(current_location, segments, threshold=10):
         for other_segment, segment_path in cache.items():
             if segment == other_segment:
                 is_reverse = segment.is_reverse(other_segment)
-                logging.info("Found a repeating segment of value: {0}, using the cache. Reverse: {1}".
-                             format(segment, is_reverse))
-                dijkstra_path = segment_path if not is_reverse else segment_path[::-1]
-                node_near_segment = segment_path[len(segment_path) - 1]
+
+                if (other_segment.start_node == segment.start_node or (is_reverse and other_segment.end_node == segment.start_node)):
+                    logging.info("Found a repeating segment of value: {0}, using the cache. Reverse: {1}".
+                                 format(segment, is_reverse))
+                    dijkstra_path = segment_path if not is_reverse else segment_path[::-1]
+                    node_near_segment = dijkstra_path[len(dijkstra_path) - 1]
 
 
         if dijkstra_path is None and node_near_segment is None:
@@ -673,6 +676,7 @@ def algorithm(current_location, segments, threshold=10):
             if idx > 0:
                 path.append(point)
 
+        segment.set_end_node(node_near_segment)
         cache[segment] = dijkstra_path
         current_location = node_near_segment
         cnt += 1
