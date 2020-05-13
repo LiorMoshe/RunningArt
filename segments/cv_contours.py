@@ -258,21 +258,14 @@ def polyline_averaging(polyline, average_dist=10):
                     point_to_idx[point] = center_to_idx[closest]
 
     new_polyline = []
-    orig_cnt = 0
-    new_cnt = 0
     for point in polyline:
-        print("Index: {0} Point: {1}".format(orig_cnt, point))
         prev_point = None
         if len(new_polyline) > 0:
             prev_point = new_polyline[len(new_polyline) - 1]
 
         current_center = idx_to_center[point_to_idx[point]]
         if current_center != prev_point:
-            print("Adding center: {0} at index: {1}".format(current_center, new_cnt))
             new_polyline.append(current_center)
-            new_cnt += 1
-
-        orig_cnt+= 1
 
     # Doesn't work for some weird reason.
     # locations = set(new_polyline)

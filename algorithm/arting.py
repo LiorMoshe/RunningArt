@@ -1,3 +1,4 @@
+import logging
 import math
 import os.path
 from decimal import Decimal
@@ -8,10 +9,8 @@ import numpy as np
 import overpy
 from geopy.distance import geodesic
 from scipy import spatial
-import logging
 import time
-from segments.utils import get_lat_long_dist
-
+from algorithm.segment import Segment
 
 
 # formatter = logging.Formatter('%(message)s')
@@ -32,6 +31,7 @@ def setup_logger(name, log_file, level=logging.INFO):
     logger.setLevel(level)
     logger.addHandler(handler)
 
+
 logger = setup_logger('first_logger', 'logger.log')
 logger = logging.getLogger('first_logger')
 
@@ -39,7 +39,18 @@ nearest_nodes = {}
 
 # Maps the way
 nodes_ways = {}
-intersections_nodes_idx = [286643475, 317214411, 357500272, 357545243, 366653136, 799417137, 286643440, 286643458, 286643460, 366651300, 366652380, 366652746, 366653067, 366653799, 1571764097, 1628430688, 1628430723, 4170418930, 366652962, 540420234, 540420265, 540420291, 366654065, 366654066, 540419840, 2470061832, 406399586, 540419838, 540419855, 1574692678, 2294948482, 540419958, 286643465, 286741983, 549271109, 1574692741, 1574692746, 1574692918, 286542239, 286542525, 286543443, 286754329, 496176171, 1628430716, 1672351167, 4582891013, 496176315, 496176455, 799417353, 366653165, 366653693, 1628430719, 540421284, 540421320, 1628430692, 286643451, 357536696, 366651462, 286643444, 366651463, 357538387, 1672351158, 2108063257, 357538922, 357536485, 366651303, 366651349, 496176172, 540420824, 366652262, 366652516, 496176174, 2139244077, 2470061834, 1628430689, 1628430687, 1628430710, 1628430720, 2470061831, 412522566, 496176177, 2470061851, 2469958099, 286643432, 4833025980, 2139244073, 7052661053, 514357166, 366649858, 384695042, 1995922116, 1995922128, 1995922151, 2470061837, 3999875641]
+intersections_nodes_idx = [286643475, 317214411, 357500272, 357545243, 366653136, 799417137, 286643440, 286643458,
+                           286643460, 366651300, 366652380, 366652746, 366653067, 366653799, 1571764097, 1628430688,
+                           1628430723, 4170418930, 366652962, 540420234, 540420265, 540420291, 366654065, 366654066,
+                           540419840, 2470061832, 406399586, 540419838, 540419855, 1574692678, 2294948482, 540419958,
+                           286643465, 286741983, 549271109, 1574692741, 1574692746, 1574692918, 286542239, 286542525,
+                           286543443, 286754329, 496176171, 1628430716, 1672351167, 4582891013, 496176315, 496176455,
+                           799417353, 366653165, 366653693, 1628430719, 540421284, 540421320, 1628430692, 286643451,
+                           357536696, 366651462, 286643444, 366651463, 357538387, 1672351158, 2108063257, 357538922,
+                           357536485, 366651303, 366651349, 496176172, 540420824, 366652262, 366652516, 496176174,
+                           2139244077, 2470061834, 1628430689, 1628430687, 1628430710, 1628430720, 2470061831,
+                           412522566, 496176177, 2470061851, 2469958099, 286643432, 4833025980, 2139244073, 7052661053,
+                           514357166, 366649858, 384695042, 1995922116, 1995922128, 1995922151, 2470061837, 3999875641]
 # Maps node is to location
 nodes_id_to_location = {}
 
@@ -49,6 +60,7 @@ float_nodeid_to_loc = {}
 location_to_id = {}
 
 third_metric_ratio = 50
+
 
 def get_intersection_nodes_with_ways(current_location=[]):
     api = overpy.Overpass()
@@ -76,12 +88,14 @@ def get_intersection_nodes_with_ways(current_location=[]):
     print("done ways")
     return result.ways, result.nodes
 
+
 def get_nodes():
     locations = []
     for idx in intersections_nodes_idx:
         node_location = nodes_id_to_location[idx]
         locations.append([float(node_location[0]), float(node_location[1])])
     return locations
+
 
 def get_nodes_map():
     if len(float_nodeid_to_loc) != 0:
@@ -90,6 +104,7 @@ def get_nodes_map():
     for id, node_loc in nodes_id_to_location.items():
         float_nodeid_to_loc[id] = [float(node_loc[0]), float(node_loc[1])]
     return float_nodeid_to_loc
+
 
 def initialize_ways_graph(ways):
     for way in ways:
@@ -113,10 +128,10 @@ def initialize_ways_graph(ways):
                     else:
                         tmp_idx = idx + 1
                         found = False
-                        while tmp_idx < len(way_nodes) - 1 and found == False :
+                        while tmp_idx < len(way_nodes) - 1 and found == False:
                             next_node = way_nodes[tmp_idx + 1]
                             if next_node.id in intersections_nodes_idx:
-                                found=True
+                                found = True
                                 nodes_ways[node.id].append(next_node.id)
                                 if next_node.id not in nodes_ways.keys():
                                     nodes_ways[next_node.id] = []
@@ -125,11 +140,12 @@ def initialize_ways_graph(ways):
     get_mid_nodes()
     # get_mid_nodes()
 
-def cartesian(latitude, longitude, elevation = 0):
+
+def cartesian(latitude, longitude, elevation=0):
     # Convert to radians
     latitude = latitude * (math.pi / 180)
     longitude = longitude * (math.pi / 180)
-    R = 6371 # 6378137.0 + elevation  # relative to centre of the earth
+    R = 6371  # 6378137.0 + elevation  # relative to centre of the earth
     X = R * math.cos(latitude) * math.cos(longitude)
     Y = R * math.cos(latitude) * math.sin(longitude)
     Z = R * math.sin(latitude)
@@ -154,21 +170,21 @@ def average_euclidean_distance(tree, nodes):
             if idx in calculated_nodes.keys():
                 if calculated_nodes[idx] != node_idx:
                     calculated_nodes[node_idx] = idx
-                    length_sum = length_sum + geodesic((node[0],node[1]), (nodes[idx][0],nodes[idx][1])).meters
-                    #length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]),float(nodes[idx][1]))
+                    length_sum = length_sum + geodesic((node[0], node[1]), (nodes[idx][0], nodes[idx][1])).meters
+                    # length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]),float(nodes[idx][1]))
                     break
             else:
                 calculated_nodes[node_idx] = idx
                 # length_sum = length_sum + distances[counter]
                 # same output with above line
                 length_sum = length_sum + geodesic((node[0], node[1]), (nodes[idx][0], nodes[idx][1])).meters
-                #length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]), float(nodes[idx][1]))
+                # length_sum = length_sum + geo.get_lat_long_dist(float(node[0]), float(node[1]), float(nodes[idx][0]), float(nodes[idx][1]))
                 break
             counter = counter + 1
         node_idx = node_idx + 1
     indexes, distances = find_nearest_nodes(float(nodes[node_idx][0]), float(nodes[node_idx][1]), tree)
     nearest_nodes[node_idx] = indexes
-    return length_sum/node_idx
+    return length_sum / node_idx
 
 
 def write_nodes_to_file(current_location=[], filename=".resources/nodes.txt"):
@@ -187,28 +203,30 @@ def get_intersection_nodes_from_file(current_location=[], filename="./resources/
             decimal_nodes = []
             places = []
             nodes = []
-            with open(filename,'r') as nodes_file:
+            with open(filename, 'r') as nodes_file:
                 for line in nodes_file.readlines():
                     splitted_line = line.split()
                     cartesian_coord = cartesian(float(splitted_line[0]), float(splitted_line[1]))
                     places.append(cartesian_coord)
-                    decimal_nodes.append((Decimal(splitted_line[0]),Decimal(splitted_line[1])))
+                    decimal_nodes.append((Decimal(splitted_line[0]), Decimal(splitted_line[1])))
                     nodes.append([splitted_line[0], splitted_line[1]])
             tree = spatial.KDTree(places)
             return decimal_nodes, nodes, tree
         except Exception:
             pass
     else:
-        return write_nodes_to_file(current_location,filename)
+        return write_nodes_to_file(current_location, filename)
 
 
 '''
 Get the nodes out of osm's map. Currently it is fixed.
 '''
+
+
 def get_intersection_nodes(current_location=[]):
     api = overpy.Overpass()
-    #TODO: change bounding box per each query based on the current location
-    #TODO: Loading this information when the user enters to the app
+    # TODO: change bounding box per each query based on the current location
+    # TODO: Loading this information when the user enters to the app
 
     result = api.query("""
  <osm-script>
@@ -250,7 +268,7 @@ def path_distance_minimization(point1, point2):
 
 
 def calculate_upper_k(node2, seg1, k, n):
-    return np.add((np.subtract(node2, seg1)) * (Decimal((k/n)) * path_distance_minimization(node2, seg1)), seg1)
+    return np.add((np.subtract(node2, seg1)) * (Decimal((k / n)) * path_distance_minimization(node2, seg1)), seg1)
 
 
 def calculate_lower_p(node1, node2, upper_k):
@@ -301,7 +319,7 @@ def distance_sum_minimization(node1, node2, seg1, seg2, n=third_metric_ratio):
 
     eq = lambda val: tangent * (val - seg1[0]) + seg1[1]
 
-    for i in range(1, n+1):
+    for i in range(1, n + 1):
 
         diff = (node2[0] - node1[0], node2[1] - node1[1])
         x_val = seg1[0] + (i / n) * sign
@@ -317,7 +335,6 @@ def distance_sum_minimization(node1, node2, seg1, seg2, n=third_metric_ratio):
         else:
             target = (k[0] - node2[0], k[1] - node2[1])
 
-
         result += math.sqrt(target[0] ** 2 + target[1] ** 2)
 
     # return Decimal((seg_dist / nodes_dist) * result)
@@ -330,7 +347,9 @@ def angle_comparison(node1, node2, seg1, seg2):
     pass
 
 
-nodes_length_dict ={}
+nodes_length_dict = {}
+
+
 def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
     f_node_id = location_to_id[(float(node1[0]), float(node1[1]))]
     s_node_id = location_to_id[(float(node2[0]), float(node2[1]))]
@@ -351,7 +370,7 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
 
     first_slope = (node2[1] - node1[1]) / (node2[0] - node1[0])
     second_slope = (seg2[1] - seg1[1]) / (seg2[0] - seg1[0])
-    angle = math.atan(abs((second_slope - first_slope) / (1 + second_slope*first_slope))) * 180 / math.pi
+    angle = math.atan(abs((second_slope - first_slope) / (1 + second_slope * first_slope))) * 180 / math.pi
 
     # if (first_slope * second_slope < 0):
     #     return Decimal('Infinity')
@@ -366,8 +385,8 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
     logging.info("Node1: (x: {0}, y: {1}), Node2: (x: {2}, y: {3})".format(node1[0], node1[1], node2[0], node2[1]))
     logger.info("Computing cost of nodes: {0} and {1}, slope mult: {2} Angle:  {3}, Area: {4}, Total Computed: {5}"
                 ", C1 Factor: {6}".
-          format(f_node_id, s_node_id, first_slope * second_slope, angle, float(c3), multiplier * float(c3),
-                 float(third_metric_ratio) * float(c1)))
+                format(f_node_id, s_node_id, first_slope * second_slope, angle, float(c3), multiplier * float(c3),
+                       float(third_metric_ratio) * float(c1)))
 
     total_cost = Decimal(multiplier) * c3 + Decimal(third_metric_ratio) * c1
 
@@ -379,7 +398,7 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
 
     # return Decimal(0.25) * c1
     # \
-        # + gamma * distance_sum_minimization(node1, node2, seg1, seg2)
+    # + gamma * distance_sum_minimization(node1, node2, seg1, seg2)
 
 
 def get_starting_node(current_location, nodes):
@@ -417,6 +436,7 @@ def compute_average_distance():
     print(total_dist / total_roads)
     return total_dist / total_roads
 
+
 def get_segment_nearest_node(segment, nodes):
     return min([[p, path_distance_minimization(segment, p)] for p in nodes], key=itemgetter(1))[0]
 
@@ -424,14 +444,20 @@ def get_segment_nearest_node(segment, nodes):
 def initialize_graph_for_dijkstra(seg1, seg2):
     g = nx.DiGraph()
     counter = 0
+    seg_length = math.sqrt((seg1[0] - seg2[0]) ** 2 + (seg1[1] - seg2[1]) ** 2)
     for id, node in nodes_id_to_location.items():
         if id in intersections_nodes_idx:
-            for other_node_id in nodes_ways[id]:
-                if other_node_id in intersections_nodes_idx:
-                    g.add_edge(node, nodes_id_to_location[other_node_id],
-                               weight=cost_function(node, nodes_id_to_location[other_node_id], seg1, seg2, 1, 1, 1))
-        counter += 1
+            node_car = gps_to_ecef_custom(float(node[0]), float(node[1]))
+            dist = min(math.sqrt((node_car[0] - seg1[0]) ** 2 + (node_car[1] - seg1[1]) ** 2),
+                       math.sqrt((node_car[0] - seg2[0]) ** 2 + (node_car[1] - seg2[1]) ** 2))
 
+            # Heuristic- Choose only the nodes which are closer to one of the end point of the segments.
+            if (dist <= seg_length * 4):
+                for other_node_id in nodes_ways[id]:
+                    if other_node_id in intersections_nodes_idx:
+                        g.add_edge(node, nodes_id_to_location[other_node_id],
+                                   weight=cost_function(node, nodes_id_to_location[other_node_id], seg1, seg2, 1, 1, 1))
+        counter += 1
     return g
 
 
@@ -440,6 +466,8 @@ def run_dijkstra(graph, source, target):
 
 
 minus_id = -1
+
+
 def get_mid_nodes():
     global minus_id
     initial_id = minus_id
@@ -447,7 +475,6 @@ def get_mid_nodes():
 
     new_ids = {}
     mid_location_to_id = {}
-
 
     for node_id, neighbors_ids in nodes_ways.items():
         if node_id in intersections_nodes_idx:
@@ -470,7 +497,6 @@ def get_mid_nodes():
         nodes_ways[i] = new_ids[i]
         intersections_nodes_idx.append(i)
 
-
         nodes_ways[new_ids[i][0]].append(i)
 
         if new_ids[i][1] in nodes_ways[new_ids[i][0]]:
@@ -481,16 +507,19 @@ def get_mid_nodes():
             nodes_ways[new_ids[i][1]].remove(new_ids[i][0])
     minus_id = curr_id
 
+
 def get_mid_point(lat1, lon1, lat2, lon2):
-    lat1 = float(lat1) *  math.pi / 180
+    lat1 = float(lat1) * math.pi / 180
     lat2 = float(lat2) * math.pi / 180
-    lon1 = float(lon1) *  math.pi / 180
-    lon2 = float(lon2) *  math.pi / 180
+    lon1 = float(lon1) * math.pi / 180
+    lon2 = float(lon2) * math.pi / 180
     Bx = math.cos(lat2) * math.cos(lon2 - lon1)
     By = math.cos(lat2) * math.sin(lon2 - lon1)
-    latMid = math.atan2(math.sin(lat1) + math.sin(lat2), math.sqrt((math.cos(lat1) + Bx) * (math.cos(lat1) + Bx) + By * By))
+    latMid = math.atan2(math.sin(lat1) + math.sin(lat2),
+                        math.sqrt((math.cos(lat1) + Bx) * (math.cos(lat1) + Bx) + By * By))
     lonMid = lon1 + math.atan2(By, math.cos(lat1) + Bx)
     return (latMid * 180 / math.pi, lonMid * 180 / math.pi)
+
 
 def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_length=0.0):
     """
@@ -520,7 +549,7 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
                 ((abs(current_location_cartesian[0] - nodes_cartesian[indices[i]][0]) > 1e-20)
                  and (abs(current_location_cartesian[1] - nodes_cartesian[indices[i]][1]) > 1e-20)):
             current_node = nodes[indices[i]]
-            node_id = location_to_id[(float(current_node[0]),float(current_node[1]))]
+            node_id = location_to_id[(float(current_node[0]), float(current_node[1]))]
             total, path = nx.single_source_dijkstra(graph, source=current_location, target=current_node)
             logging.info("Path to node {0} has total cost of {1}".format(node_id, total))
 
@@ -529,7 +558,8 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
             # print("Distance diff: ", path_len - seg_length)
             total = total * Decimal(max(abs(path_len - seg_length), 1))
 
-            logging.info("After factoring node {0} has total cost of {1}, min total: {2}".format(node_id, total, min_total))
+            logging.info(
+                "After factoring node {0} has total cost of {1}, min total: {2}".format(node_id, total, min_total))
 
             # print("Distance of path: {0}, Distance of segment: {1}".format(path_len, seg_length))
             # print("Node compared: ", nodes[indices[i]])
@@ -542,19 +572,18 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
                 min_node = current_node
 
     logging.info("Chose minimal node: {0} with cost {1}".format(min_node_id, min_total))
-
-    # print("Chosen cost of path: ", min_total)
-    # print("Min node: ", min_node)
     return min_path, min_node
+
 
 def compute_path_length(path):
     dist = 0
     for idx in range(len(path) - 1):
-        first = gps_to_ecef_custom(float(path[idx][0]),float(path[idx][1]))
-        second = gps_to_ecef_custom(float(path[idx+1][0]),float(path[idx+1][1]))
+        first = gps_to_ecef_custom(float(path[idx][0]), float(path[idx][1]))
+        second = gps_to_ecef_custom(float(path[idx + 1][0]), float(path[idx + 1][1]))
         dist += math.sqrt((first[0] - second[0]) ** 2 + (first[1] - second[1]) ** 2)
         # dist += get_lat_long_dist(float(path[idx][0]),float(path[idx][1]),float(path[idx+1][0]),float(path[idx+1][1])) * 1000
     return dist
+
 
 def compute_remaining_segment(segment, length, segment_length):
     """
@@ -568,8 +597,8 @@ def compute_remaining_segment(segment, length, segment_length):
                          "length {1}".format(length, segment_length))
 
     ratio = float(length / segment_length)
-    return [(ratio * segment[0][0] + (1-ratio) * segment[1][0],
-             ratio * segment[0][1] + (1-ratio) * segment[1][1]), segment[1]]
+    return [(ratio * segment[0][0] + (1 - ratio) * segment[1][0],
+             ratio * segment[0][1] + (1 - ratio) * segment[1][1]), segment[1]]
 
 
 def append_ids_to_paths(dijkstra_paths):
@@ -582,9 +611,10 @@ def append_ids_to_paths(dijkstra_paths):
     for path in dijkstra_paths:
         updated_path = []
         for point in path:
-            updated_path.append({"id": location_to_id[(point[0], point[1])],"loc": point})
+            updated_path.append({"id": location_to_id[(point[0], point[1])], "loc": point})
         updated_paths.append(updated_path)
     return updated_paths
+
 
 def algorithm(current_location, segments, threshold=10):
     '''
@@ -599,24 +629,41 @@ def algorithm(current_location, segments, threshold=10):
     current_location = get_starting_node(current_location, nodes)
     path = [current_location]
     cnt = 0
+    cache = {}
     dijkstra_paths = []
-    leftovers =[]
+    leftovers = []
     while segments or leftovers:
         print("Number of segments left: ", len(segments))
+        logging.info("Number of segments left: {0}".format(len(segments)))
         next_segment = get_next_segment(segments, leftovers)
+        segment = Segment(next_segment[0], next_segment[1])
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1])
         seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
                                (next_segment[0][1] - next_segment[1][1]) ** 2)
 
-        dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes, k=5,seg_length=seg_length)
+        # Check if the segment is already in cache.
+        dijkstra_path = None
+        node_near_segment = None
+        for other_segment, segment_path in cache.items():
+            if segment == other_segment:
+                is_reverse = segment.is_reverse(other_segment)
+                logging.info("Found a repeating segment of value: {0}, using the cache. Reverse: {1}".
+                             format(segment, is_reverse))
+                dijkstra_path = segment_path if not is_reverse else segment_path[::-1]
+                node_near_segment = segment_path[len(segment_path) - 1]
+
+
+        if dijkstra_path is None and node_near_segment is None:
+            dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes,
+                                                                     k=5, seg_length=seg_length)
+
+        print("Finished computing opt path.")
         # if ((seg_length - length) > threshold):
         #     print("PASSED LENGTH TEST")
         #     leftovers.append(compute_remaining_segment(next_segment, length, seg_length))
 
         # print("Path Length: {0}, Segment Length: {1}".format(length, seg_length))
         logger.info("Path Num: {0}, Path: {1}".format(cnt, dijkstra_path))
-
-        # print("Path Num: {0}, Path: {1}".format(cnt, dijkstra_path))
         if cnt == 0:
             dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path])
         else:
@@ -625,15 +672,18 @@ def algorithm(current_location, segments, threshold=10):
         for idx, point in enumerate(dijkstra_path):
             if idx > 0:
                 path.append(point)
+
+        cache[segment] = dijkstra_path
         current_location = node_near_segment
         cnt += 1
-    print(path)
+
 
     float_path = []
     for point in path:
         float_path.append([float(point[0]), float(point[1])])
-    global  total_time
+
     return float_path, dijkstra_paths
+
 
 def gps_to_ecef_custom(lat, lon):
     rad_lat = lat * (math.pi / 180.0)
@@ -650,7 +700,10 @@ def gps_to_ecef_custom(lat, lon):
 
     return (x, y)
 
-if __name__=="__main__":
-    path = [(Decimal('32.0595662'), Decimal('34.7693194')), (Decimal('32.05913935001895964660434401594102382659912109375'), Decimal('34.76938890032428020049337646923959255218505859375'))]
+
+if __name__ == "__main__":
+    path = [(Decimal('32.0595662'), Decimal('34.7693194')), (
+    Decimal('32.05913935001895964660434401594102382659912109375'),
+    Decimal('34.76938890032428020049337646923959255218505859375'))]
     length = compute_path_length(path)
     print("length: ", length)
