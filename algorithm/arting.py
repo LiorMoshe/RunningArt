@@ -5,15 +5,10 @@ from decimal import Decimal
 from operator import itemgetter
 
 import networkx as nx
-import numpy as np
-import overpy
-from geopy.distance import geodesic
 from scipy import spatial
-import time
-from algorithm.segment import SegmentHistory
-from segments.utils import get_lat_long_dist
-from osm.bounding_box_calculation import *
 
+from algorithm.segment import SegmentHistory
+from osm.bounding_box_calculation import *
 
 
 # formatter = logging.Formatter('%(message)s')
@@ -94,7 +89,7 @@ def initialize_ways_graph(ways, intersections_nodes):
             # copied_way.remove(node)
             if node.id in intersections_nodes:
                 if node.id not in nodes_id_to_location:
-                    nodes_id_to_location[node.id] = (node.lat, node.lon)
+                    nodes_id_to_location[node.id] = (Decimal(node.lat), Decimal(node.lon))
                     location_to_id[(float(node.lat), float(node.lon))] = node.id
                     if node.id not in nodes_ways.keys():
                         nodes_ways[node.id] = []
@@ -108,7 +103,7 @@ def initialize_ways_graph(ways, intersections_nodes):
                     else:
                         tmp_idx = idx + 1
                         found = False
-                        while tmp_idx < len(way_nodes) - 1 and found == False:
+                        while tmp_idx < len(way_nodes) - 1 and found == False :
                             next_node = way_nodes[tmp_idx + 1]
                             if next_node.id in intersections_nodes:
                                 found=True
@@ -117,9 +112,8 @@ def initialize_ways_graph(ways, intersections_nodes):
                                     nodes_ways[next_node.id] = []
                                 nodes_ways[next_node.id].append(node.id)
                             tmp_idx = tmp_idx + 1
-    get_mid_nodes(intersections_nodes)
-    print(nodes_ways)
-    # get_mid_nodes()
+    intersections_nodes = get_mid_nodes(intersections_nodes)
+    return intersections_nodes
 
 def cartesian(latitude, longitude, elevation = 0):
     # Convert to radians
@@ -201,8 +195,6 @@ def get_intersection_nodes_from_file(current_location=[], filename="./resources/
 '''
 Get the nodes out of osm's map. Currently it is fixed.
 '''
-
-
 def get_intersection_nodes(current_location=[]):
     api = overpy.Overpass()
     # TODO: change bounding box per each query based on the current location
@@ -453,7 +445,6 @@ def get_mid_nodes(intersections_nodes):
     new_ids = {}
     mid_location_to_id = {}
 
-
     for node_id, neighbors_ids in nodes_ways.items():
         if node_id in intersections_nodes:
             node_location = nodes_id_to_location[node_id]
@@ -470,13 +461,11 @@ def get_mid_nodes(intersections_nodes):
     for loc, id in mid_location_to_id.items():
         nodes_id_to_location[id] = loc
         location_to_id[(loc[0], loc[1])] = id
-
     for i in range(initial_id, curr_id, -1):
         nodes_ways[i] = new_ids[i]
         intersections_nodes.append(i)
 
         nodes_ways[new_ids[i][0]].append(i)
-
         if new_ids[i][1] in nodes_ways[new_ids[i][0]]:
             nodes_ways[new_ids[i][0]].remove(new_ids[i][1])
 
@@ -484,7 +473,7 @@ def get_mid_nodes(intersections_nodes):
         if new_ids[i][0] in nodes_ways[new_ids[i][1]]:
             nodes_ways[new_ids[i][1]].remove(new_ids[i][0])
     minus_id = curr_id
-
+    return intersections_nodes
 
 def get_mid_point(lat1, lon1, lat2, lon2):
     lat1 = float(lat1) * math.pi / 180
@@ -550,7 +539,6 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
 
     logging.info("Chose minimal node: {0} with cost {1}".format(min_node_id, min_total))
     return min_path, min_node
-
 
 def compute_path_length(path):
     dist = 0
@@ -635,7 +623,6 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
             dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes,
                                                                      k=5, seg_length=seg_length)
 
-        print("Finished computing opt path.")
         # if ((seg_length - length) > threshold):
         #     print("PASSED LENGTH TEST")
         #     leftovers.append(compute_remaining_segment(next_segment, length, seg_length))
