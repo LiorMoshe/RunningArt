@@ -71,7 +71,6 @@ def send_drawing():
         print("Received distance: ", distance/1000)
         ways,intersections_nodes_idx = local_convert(initial_pos, distance/1000)
         intersections_nodes_idx = list(intersections_nodes_idx)
-        print(intersections_nodes_idx)
         intersections_nodes_idx = initialize_ways_graph(ways, intersections_nodes_idx)
 
         required_average = compute_average_distance(intersections_nodes_idx)

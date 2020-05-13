@@ -608,10 +608,8 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
     while segments or leftovers:
         print("Number of segments left: ", len(segments))
         next_segment = get_next_segment(segments, leftovers)
-        print("lior")
         start_time = time.time()
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1], intersections_nodes_idx)
-        print("moshe")
         total_times_init += time.time() - start_time
         # print("--- %s Initialization seconds ---" % (time.time() - start_time))
         seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
