@@ -8,6 +8,7 @@ from sklearn.neighbors import NearestNeighbors
 import numpy as np
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
+import platform
 
 dist_cache = {}
 def distance(p1, p2):
@@ -140,24 +141,97 @@ def intersection_nodes_with_ways(location_node, km_distance):
     return result.ways, result.nodes
 
 
-def local_convert(location_node,km_distance):
+# def local_convert(location_node,km_distance):
+#     south_lat, west_long, north_lat, east_long = get_boundng_box_intersection_nodes(location_node, km_distance)
+#     box = '{0},{1},{2},{3}'.format(west_long, south_lat, east_long, north_lat)
+#     print(box)
+#     print(os.getcwd())
+#     cmd = "osmconvert israel-and-palestine-latest.osm.pbf -b={0} --drop-author --drop-version  --complete-ways -o=edry.o5m".format(box)
+#     print(cmd)
+#     os.system(cmd)
+#     cmd = "osmfilter edry.o5m --keep=\"highway=pedestrian =tertiary =residential  \" --drop-relations --drop-author --drop-version  -o=edry2.o5m"
+#     os.system(cmd)
+#     cmd = "osmconvert edry2.o5m -o=edry.pbf"
+#     os.system(cmd)
+#     ways = []
+#     nodes_info = {}
+#     distances_nodes = []
+#     timee = time.time()
+#     for entity in parse_file('edry.pbf'):
+#         if isinstance(entity, Way):
+#             nodes = []
+#             for n in entity.nodes:
+#                 if n in nodes_info.keys():
+#                     nodes.append(nodes_info[n])
+#             ways.append(ArtingWay(nodes))
+#         elif isinstance(entity, Relation):
+#             pass
+#         else:
+#             if len(nodes_info.keys())<2:
+#                 nodes_info[entity.id] = ArtingNode(entity.id, entity.lat, entity.lon)
+#                 distances_nodes.append([entity.lat, entity.lon])
+#             else:
+#                 points = distances_nodes
+#                 nbrs = NearestNeighbors(n_neighbors=1, metric=distance).fit(points)
+#                 userlocation = [entity.lat, entity.lon]
+#
+#                 userlocation = np.array([[userlocation[0], userlocation[1]]])
+#                 distances, indices = nbrs.kneighbors(userlocation)
+#                 if(distances[0][0]>0.02494899):
+#                     nodes_info[entity.id] = ArtingNode(entity.id, entity.lat, entity.lon)
+#                     distances_nodes.append([entity.lat, entity.lon])
+#
+#     print('-----------------')
+#     print(time.time() - timee)
+#     return ways,nodes_info.keys()
+
+
+
+def local_convert(location_node, km_distance):
     south_lat, west_long, north_lat, east_long = get_boundng_box_intersection_nodes(location_node, km_distance)
     box = '{0},{1},{2},{3}'.format(west_long, south_lat, east_long, north_lat)
-    print(box)
-    print(os.getcwd())
-    cmd = "osmconvert israel-and-palestine-latest.osm.pbf -b={0} --drop-author --drop-version  --complete-ways -o=edry.o5m".format(box)
-    print(cmd)
-    os.system(cmd)
-    cmd = "osmfilter edry.o5m --keep=\"highway=pedestrian =tertiary =residential  \" --drop-relations --drop-author --drop-version  -o=edry2.o5m"
-    os.system(cmd)
-    cmd = "osmconvert edry2.o5m -o=edry.pbf"
-    os.system(cmd)
+    plt = platform.system()
+    if plt == "Darwin":
+        if get_location_country(location_node)=='ישראל':
+            cmd = "osmconvert {0} -b={1} --drop-author --drop-version  --complete-ways -o=edry.o5m".format('israel-and-palestine-latest.osm.pbf', box)
+            if get_location_country(location_node) == 'Hungary':
+                cmd = "osmconvert {0} -b={1} --drop-author --drop-version  --complete-ways -o=edry.o5m".format(
+                    'hungary-latest.osm.pbf', box)
+        timee = time.time()
+        os.system(cmd)
+        print("first done: ", time.time() - timee)
+        timee = time.time()
+        cmd = "osmfilter edry.o5m --keep=\"highway=pedestrian =tertiary =residential  \" --drop-relations --drop-author --drop-version  -o=edry2.o5m"
+        os.system(cmd)
+        print("second done: ", time.time() - timee)
+        timee = time.time()
+        cmd = "osmconvert edry2.o5m -o=edry.pbf"
+        os.system(cmd)
+        print("third done: ", time.time() - timee)
+    elif plt == "Windows":
+        country = get_location_country(location_node)
+        if country =='ישראל' :
+            cmd = 'cmd /c "osmconvert64-0.8.8p.exe {0} ' \
+              ' -b={1} --drop-author --drop-version  --complete-ways -o=edry.o5m"'.format('israel-and-palestine-latest.osm.pbf', box)
+        if country == 'Magyarország':
+            cmd = 'cmd /c "osmconvert64-0.8.8p.exe {0} ' \
+              ' -b={1} --drop-author --drop-version  --complete-ways -o=edry.o5m"'.format('hungary-latest.osm.pbf', box)
+        timee = time.time()
+        os.system(cmd)
+        print("first done: ", time.time() - timee)
+        cmd = 'cmd /c "osmfilter edry.o5m --keep="highway=pedestrian =tertiary =residential  " --drop-relations --drop-author --drop-version  -o=edry2.o5m"'
+        timee = time.time()
+        os.system(cmd)
+        print("second done: ", time.time() - timee)
+        timee = time.time()
+        cmd = 'cmd /c "osmconvert64-0.8.8p.exe edry2.o5m -o=edry.pbf"'
+        os.system(cmd)
+        print("third done: ", time.time() - timee)
+
     ways = []
     nodes_info = {}
     distances_nodes = []
-    timee = time.time()
     for entity in parse_file('edry.pbf'):
-        print("Parsing entity")
         if isinstance(entity, Way):
             nodes = []
             for n in entity.nodes:
@@ -167,30 +241,56 @@ def local_convert(location_node,km_distance):
         elif isinstance(entity, Relation):
             pass
         else:
-            if len(nodes_info.keys())<2:
-                nodes_info[entity.id] = ArtingNode(entity.id, entity.lat, entity.lon)
-                distances_nodes.append([entity.lat, entity.lon])
-            else:
-                points = distances_nodes
-                nbrs = NearestNeighbors(n_neighbors=1, metric=distance).fit(points)
-                userlocation = [entity.lat, entity.lon]
+            nodes_info[entity.id] = ArtingNode(entity.id, entity.lat, entity.lon)
+            distances_nodes.append([entity.lat, entity.lon, entity.id])
 
-                userlocation = np.array([[userlocation[0], userlocation[1]]])
-                distances, indices = nbrs.kneighbors(userlocation)
-                if(distances[0][0]>0.02494899):
-                    nodes_info[entity.id] = ArtingNode(entity.id, entity.lat, entity.lon)
-                    distances_nodes.append([entity.lat, entity.lon])
+    nodes_info = {}
+    deleted = {}
+    timee = time.time()
+    points = []
+    for node in distances_nodes:
+        points.append([node[0], node[1]])
+    nbrs = NearestNeighbors(n_neighbors=5, metric=distance).fit(points)
+    distances, indices = nbrs.kneighbors(points)
+    for i in range(len(distances_nodes)):
+        # if distances_nodes[i][2] == 366650750 or distances_nodes[i][2] == 496176177:
+        #     print(distances_nodes[i][2], distances_nodes[indices[i][1]][2])
+        #     print("dis: ", distance([distances_nodes[i][0], distances_nodes[i][1]],
+        #                             [distances_nodes[indices[i][1]][0], distances_nodes[indices[i][1]][1]]))
+        if distances_nodes[indices[i][1]][2] not in deleted.keys() and distances_nodes[i][2] not in deleted.keys():
+            if distances[i][1] > 0.02494899:
+                nodes_info[distances_nodes[i][2]] = ArtingNode(distances_nodes[i][2], distances_nodes[i][0],
+                                                               distances_nodes[i][1])
+            else:
+                for j in range(5):
+                    if j != 0:
+                        if distances[i][j] > 0.02494899:
+                            break;
+                        else:
+                            deleted[distances_nodes[indices[i][j]][2]] = "deleted"
+                nodes_info[distances_nodes[i][2]] = ArtingNode(distances_nodes[i][2], distances_nodes[i][0],
+                                                               distances_nodes[i][1])
+
+
+    # for point in distances_nodes:
+    #     userlocation = np.array([[point[0], point[1]]])
+    #     distances, indices = nbrs.kneighbors(userlocation)
+    #     #0.02494899
+    #     if (distances[0][1] > 0.005):
+    #         nodes_info[point[2]] = ArtingNode(point[2], point[0], point[1])
 
     print('-----------------')
     print(time.time() - timee)
     return ways,nodes_info.keys()
 
 
+
 def get_location_country(position):
     locator = Nominatim(user_agent="my-application")
-    coordinates = (53.480837, -2.244914)
+    coordinates = (position[0], position[1])
     location = locator.reverse(coordinates)
     print(location.raw['address']['country'])
+    return location.raw['address']['country']
 
 
 def get_interections(ways):
@@ -225,21 +325,4 @@ def intersection_nodes(location_node,km_distance):
             nodes.append(entity.id)
     return nodes
 
-# aaa= [286643475, 317214411, 357500272, 357545243, 366653136, 799417137, 286643440, 286643458, 286643460, 366651300, 366652380, 366652746, 366653067, 366653799, 1571764097, 1628430688, 1628430723, 4170418930, 366652962, 540420234, 540420265, 540420291, 366654065, 366654066, 540419840, 2470061832, 406399586, 540419838, 540419855, 1574692678, 2294948482, 540419958, 286643465, 286741983, 549271109, 1574692741, 1574692746, 1574692918, 286542239, 286542525, 286543443, 286754329, 496176171, 1628430716, 1672351167, 4582891013, 496176315, 496176455, 799417353, 366653165, 366653693, 1628430719, 540421284, 540421320, 1628430692, 286643451, 357536696, 366651462, 286643444, 366651463, 357538387, 1672351158, 2108063257, 357538922, 357536485, 366651303, 366651349, 496176172, 540420824, 366652262, 366652516, 496176174, 2139244077, 2470061834, 1628430689, 1628430687, 1628430710, 1628430720, 2470061831, 412522566, 496176177, 2470061851, 2469958099, 286643432, 4833025980, 2139244073, 7052661053, 514357166, 366649858, 384695042, 1995922116, 1995922128, 1995922151, 2470061837, 3999875641]
-#
-# bbb = [286643475, 317214411, 357500272, 357545243, 366653136, 799417137, 286643440, 286643458,
-#                            286643460, 366651300, 366652380, 366652746, 366653067, 366653799, 1571764097, 1628430688,
-#                            1628430723, 4170418930, 366652962, 540420234, 540420265, 540420291, 366654065, 366654066,
-#                            540419840, 2470061832, 406399586, 540419838, 540419855, 1574692678, 2294948482, 540419958,
-#                            286643465, 286741983, 549271109, 1574692741, 1574692746, 1574692918, 286542239, 286542525,
-#                            286543443, 286754329, 496176171, 1628430716, 1672351167, 4582891013, 496176315, 496176455,
-#                            799417353, 366653165, 366653693, 1628430719, 540421284, 540421320, 1628430692, 286643451,
-#                            357536696, 366651462, 286643444, 366651463, 357538387, 1672351158, 2108063257, 357538922,
-#                            357536485, 366651303, 366651349, 496176172, 540420824, 366652262, 366652516, 496176174,
-#                            2139244077, 2470061834, 1628430689, 1628430687, 1628430710, 1628430720, 2470061831,
-#                            412522566, 496176177, 2470061851, 2469958099, 286643432, 4833025980, 2139244073, 7052661053,
-#                            514357166, 366649858, 384695042, 1995922116, 1995922128, 1995922151, 2470061837, 3999875641]
-#
-# for xx in bbb:
-#     if xx not in aaa:
-#         print(xx)
+
