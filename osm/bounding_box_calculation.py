@@ -63,21 +63,34 @@ def get_intersection_nodes_idx(location_node, km_distance):
     api = overpy.Overpass()
     bbox = '<bbox-query e=%s n=%s s=%s w=%s/>' % ('\"'+str(east_long)+'\"','\"'+str(north_lat)+'\"','\"'+str(south_lat)+'\"','\"'+str(west_long)+'\"')
     query = '''
-    <query type="way" into="hw">
-      <has-kv k="highway"/>
-      <has-kv k="highway" modv="not" regv="footway|cycleway|path|service|track"/>
-              %s
-    </query>
-
+    <osm-script>
+<query type="way" into="hw">
+  <has-kv k="highway"/>
+  <has-kv k="highway" modv="not" regv="footway|cycleway|path|service|track"/>
+   %s 
+</query>
 
 <foreach from="hw" into="w">
+  <recurse from="w" type="way-node" into="ns"/>
+  <recurse from="ns" type="node-way" into="w2"/>
+  <query type="way" into="w2">
+    <item set="w2"/>
+    <has-kv k="highway"/>
+    <has-kv k="highway" modv="not" regv="footway|cycleway|path|service|track"/>
+  </query>
+  <difference into="wd">
+    <item set="w2"/>
+    <item set="w"/>
+  </difference>
+  <recurse from="wd" type="way-node" into="n2"/>
   <recurse from="w"  type="way-node" into="n3"/>
   <query type="node">
+    <item set="n2"/>
     <item set="n3"/>
   </query>
   <print/>
 </foreach>
-    <print/>
+  </osm-script>
     ''' % bbox
     result = api.query(query)
     return [node.id for node in result.nodes]
