@@ -40,6 +40,8 @@ nodes_ways = {}
 # Maps node is to location
 nodes_id_to_location = {}
 
+cartesian_to_geo = {}
+
 float_nodeid_to_loc = {}
 
 # For debugging, location to id.
@@ -354,11 +356,11 @@ def cost_function(node1, node2, seg1, seg2, alpha, beta, gamma):
     # print("Computing cost of nodes: {0} and {1}, slope mult: {2} Angle:  {3}, Area: {4}, Total Computed Area Factor: {5}".
     #       format(f_node_id, s_node_id, first_slope * second_slope, angle, float(c3), multiplier * float(c3)))
 
-    logging.info("Node1: (x: {0}, y: {1}), Node2: (x: {2}, y: {3})".format(node1[0], node1[1], node2[0], node2[1]))
-    logger.info("Computing cost of nodes: {0} and {1}, slope mult: {2} Angle:  {3}, Area: {4}, Total Computed: {5}"
-                ", C1 Factor: {6}".
-                format(f_node_id, s_node_id, first_slope * second_slope, angle, float(c3), multiplier * float(c3),
-                       float(third_metric_ratio) * float(c1)))
+    # logging.info("Node1: (x: {0}, y: {1}), Node2: (x: {2}, y: {3})".format(node1[0], node1[1], node2[0], node2[1]))
+    # logger.info("Computing cost of nodes: {0} and {1}, slope mult: {2} Angle:  {3}, Area: {4}, Total Computed: {5}"
+    #             ", C1 Factor: {6}".
+    #             format(f_node_id, s_node_id, first_slope * second_slope, angle, float(c3), multiplier * float(c3),
+    #                    float(third_metric_ratio) * float(c1)))
 
     total_cost = Decimal(multiplier) * c3 + Decimal(third_metric_ratio) * c1
 
@@ -454,6 +456,7 @@ def get_mid_nodes(intersections_nodes):
                     mid_node = get_mid_point(node_location[0], node_location[1], other_node_loc[0], other_node_loc[1])
                     min_node_decimal = (Decimal(mid_node[0]), Decimal(mid_node[1]))
                     if min_node_decimal not in mid_location_to_id:
+                        logging.info("Mid Node Id: {0}, Location: {1}".format(curr_id, min_node_decimal))
                         mid_location_to_id[min_node_decimal] = curr_id
                         new_ids[curr_id] = [node_id, neighbor_id]
                         curr_id -= 1
@@ -487,7 +490,7 @@ def get_mid_point(lat1, lon1, lat2, lon2):
     lonMid = lon1 + math.atan2(By, math.cos(lat1) + Bx)
     return (latMid * 180 / math.pi, lonMid * 180 / math.pi)
 
-def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_length=0.0):
+def choose_optimal_target(graph, current_location, segment, nodes, segment_latlon=None,k=10, seg_length=0.0):
     """
     Go over the k closest nodes to the end of the given segment and return the one
     which results in the path with the lowest cost.
@@ -502,40 +505,61 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
     # segment_cartesian = gps_to_ecef_custom(float(segment[0]), float(segment[1]))
     current_location_cartesian = gps_to_ecef_custom(float(current_location[0]), float(current_location[1]))
     nodes_cartesian = [gps_to_ecef_custom(float(node[0]), float(node[1])) for node in nodes]
+    for p in nodes_cartesian:
+        dist = math.sqrt((segment[0] - p[0]) ** 2 + (segment[1] - p[1]) ** 2)
+        logging.info("Node: {0}, Segment: {1}, Dist: {2}".format(segment, p, dist))
+
     distance_array = np.array([path_distance_minimization(segment, p) for p in nodes_cartesian])
     distance_array = distance_array[distance_array != 0]
     indices = np.argpartition(distance_array, k + 1)
+    logging.info("Length of nodes_cartesian: {0}, Distance array: {1}, Indices: {2}".
+                 format(len(nodes_cartesian), len(distance_array), len(indices)))
 
+    logging.info("Lengths of arrays: Distances: {0}, Nodes: {1}".format(len(distance_array), len(nodes_cartesian)))
     min_total = float('inf')
     min_path = []
     min_node_id = 0
     min_node = None
+    starting_id = location_to_id[(float(current_location[0]), float(current_location[1]))]
+    logging.info("Current starting node: {0}".format(starting_id))
     for i in range(0, k):
+        logging.info("K: {0}, Length of indices: {1}".format(k, len(indices)))
+        logging.info("Index: {0}, Number of cartesian nodes: {1}".format(indices[i], len(nodes_cartesian)))
         if nodes_cartesian[indices[i]] is not None and \
                 ((abs(current_location_cartesian[0] - nodes_cartesian[indices[i]][0]) > 1e-20)
                  and (abs(current_location_cartesian[1] - nodes_cartesian[indices[i]][1]) > 1e-20)):
             current_node = nodes[indices[i]]
+            curr_dist = distance_array[indices[i]]
             node_id = location_to_id[(float(current_node[0]), float(current_node[1]))]
-            total, path = nx.single_source_dijkstra(graph, source=current_location, target=current_node)
-            logging.info("Path to node {0} has total cost of {1}".format(node_id, total))
+            try:
+                logging.info("Checking node id: {0}, Distance: {1}".format(node_id, curr_dist))
+                total, path = nx.single_source_dijkstra(graph, source=current_location, target=current_node)
+                logging.info("Path to node {0} has total cost of {1}".format(node_id, total))
 
-            path_len = compute_path_length(path)
+                path_len = compute_path_length(path)
 
-            # print("Distance diff: ", path_len - seg_length)
-            total = total * Decimal(max(abs(path_len - seg_length), 1))
+                # print("Distance diff: ", path_len - seg_length)
+                total = total * Decimal(max(abs(path_len - seg_length), 1))
 
-            logging.info(
-                "After factoring node {0} has total cost of {1}, min total: {2}".format(node_id, total, min_total))
+                logging.info(
+                    "After factoring node {0} has total cost of {1}, min total: {2}".format(node_id, total, min_total))
 
-            # print("Distance of path: {0}, Distance of segment: {1}".format(path_len, seg_length))
-            # print("Node compared: ", nodes[indices[i]])
-            # print("Node Id: {0} Index: {1} Comparing, total: {2}, min total: {3}, length of path: {4}".format(node_id,indices[i],total, min_total, len(path)))
-            if total < min_total:
-                logging.info("Setting ")
-                min_total = total
-                min_path = path
-                min_node_id = node_id
-                min_node = current_node
+                # print("Distance of path: {0}, Distance of segment: {1}".format(path_len, seg_length))
+                # print("Node compared: ", nodes[indices[i]])
+                # print("Node Id: {0} Index: {1} Comparing, total: {2}, min total: {3}, length of path: {4}".format(node_id,indices[i],total, min_total, len(path)))
+                if total < min_total:
+                    logging.info("Found new minimal path, Node Id: {0}, Path cost: {1}".format(node_id, total))
+                    min_total = total
+                    min_path = path
+                    min_node_id = node_id
+                    min_node = current_node
+            except nx.NetworkXNoPath:
+                logging.info("No path to node. Id: {0}, Location: {1}, Distance: {2}".format(node_id, current_node, curr_dist))
+
+    # Check if there is no path to any node.
+    if min_node is None:
+        print("PROBLEM NO PATH")
+        logging.info("No path to any node.")
 
     logging.info("Chose minimal node: {0} with cost {1}".format(min_node_id, min_total))
     return min_path, min_node
@@ -588,6 +612,7 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
     :param nodes:
     :return:
     '''
+    global cartesian_to_geo
     nodes = list(nodes_id_to_location.values())
     current_location = get_starting_node(current_location, nodes)
     path = [current_location]
@@ -602,6 +627,7 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
         segment = SegmentHistory(next_segment[0], next_segment[1])
         segment.set_start_node(current_location)
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1], intersections_nodes_idx)
+        logging.info("Finished initializing graph for dijkstra.")
         seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
                                (next_segment[0][1] - next_segment[1][1]) ** 2)
 
@@ -620,6 +646,7 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
 
 
         if dijkstra_path is None and node_near_segment is None:
+            logging.info("No cached path for this segment, compute the optimal target.")
             dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes,
                                                                      k=5, seg_length=seg_length)
 
