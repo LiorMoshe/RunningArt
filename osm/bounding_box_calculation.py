@@ -46,6 +46,7 @@ class ArtingWay:
 
 
 def get_boundng_box_intersection_nodes(location_node, km_distance):
+    km_distance = km_distance
     destination = geopy.distance.distance(kilometers=km_distance).destination((location_node[0],location_node[1]), 180)
     south_lat, south_long = destination.latitude, destination.longitude
     destination = geopy.distance.distance(kilometers=km_distance).destination((location_node[0],location_node[1]), 0)

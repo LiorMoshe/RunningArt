@@ -6,6 +6,7 @@ from operator import itemgetter
 
 import networkx as nx
 from scipy import spatial
+from geopy.distance import geodesic
 
 from algorithm.segment import SegmentHistory
 from osm.bounding_box_calculation import *
@@ -37,10 +38,12 @@ nearest_nodes = {}
 # Maps the way
 nodes_ways = {}
 
+minus_id = -1
+
 # Maps node is to location
 nodes_id_to_location = {}
 
-cartesian_to_geo = {}
+segments_cartesian_to_geo = {}
 
 float_nodeid_to_loc = {}
 
@@ -76,12 +79,34 @@ def get_intersection_nodes_with_ways(current_location=[]):
     return result.ways, result.nodes
 
 def get_nodes_map():
-    if len(float_nodeid_to_loc) != 0:
-        return float_nodeid_to_loc
+    # if len(float_nodeid_to_loc) != 0:
+    #     if -242 in float_nodeid_to_loc:
+    #         print("Located")
+    #     return float_nodeid_to_loc
 
+    print("RUNNING")
     for id, node_loc in nodes_id_to_location.items():
+        if id == -242:
+            print("FOUND -242")
         float_nodeid_to_loc[id] = [float(node_loc[0]), float(node_loc[1])]
+
+    if -242 in float_nodeid_to_loc:
+        print("Located")
     return float_nodeid_to_loc
+
+def reset_maps():
+    """
+    Reset the internal mapping.
+    :return:
+    """
+    global minus_id
+    minus_id = -1
+    nearest_nodes = {}
+    nodes_ways = {}
+    nodes_id_to_location = {}
+    segments_cartesian_to_geo = {}
+    float_nodeid_to_loc = {}
+    location_to_id = {}
 
 def initialize_ways_graph(ways, intersections_nodes):
     for way in ways:
@@ -381,9 +406,19 @@ def get_starting_node(current_location, nodes):
 
 def get_next_segment(segments, leftovers):
     if len(leftovers) == 0:
+        global segments_cartesian_to_geo
         seg = segments[0]
         segments.remove(seg)
         # Convert to cartesian form.
+        start_segment_geo = (float(seg[0][0]), float(seg[0][1]))
+        end_segment_geo = (float(seg[1][0]), float(seg[1][1]))
+
+        start_cartesian = gps_to_ecef_custom(start_segment_geo[0], start_segment_geo[1])
+        end_cartesian = gps_to_ecef_custom(end_segment_geo[0], end_segment_geo[1])
+        segments_cartesian_to_geo[start_cartesian] = start_segment_geo
+        segments_cartesian_to_geo[end_cartesian] = end_segment_geo
+
+
         return [gps_to_ecef_custom(float(seg[0][0]), float(seg[0][1])),
                 gps_to_ecef_custom(float(seg[1][0]), float(seg[1][1]))]
     else:
@@ -401,12 +436,15 @@ def compute_average_distance(intersections_nodes):
     total_dist = 0
     for node_id, available_ways in nodes_ways.items():
         if node_id in intersections_nodes:
+            logging.info("Node Id: {0}, Ways: {1}".format(node_id, len(available_ways)))
             node = nodes_id_to_location[node_id]
             for other_node_id in available_ways:
                 if other_node_id in intersections_nodes:
+                    logging.info("Way between, Start: {0}, End: {1}".format(node_id, other_node_id))
                     other_node = nodes_id_to_location[other_node_id]
                     total_dist += geodesic(node, other_node).meters
                     total_roads += 1
+    logging.info("Intersection Nodes: {0}, Total Roads: {1}, Node Ways: {2}".format(len(intersections_nodes), total_roads, len(nodes_ways)))
     print(total_dist / total_roads)
     return total_dist / total_roads
 
@@ -438,7 +476,6 @@ def run_dijkstra(graph, source, target):
     return nx.dijkstra_path(graph, source, target)
 
 
-minus_id = -1
 def get_mid_nodes(intersections_nodes):
     global minus_id
     initial_id = minus_id
@@ -503,34 +540,55 @@ def choose_optimal_target(graph, current_location, segment, nodes, segment_latlo
     :return:
     """
     # segment_cartesian = gps_to_ecef_custom(float(segment[0]), float(segment[1]))
-    current_location_cartesian = gps_to_ecef_custom(float(current_location[0]), float(current_location[1]))
-    nodes_cartesian = [gps_to_ecef_custom(float(node[0]), float(node[1])) for node in nodes]
-    for p in nodes_cartesian:
-        dist = math.sqrt((segment[0] - p[0]) ** 2 + (segment[1] - p[1]) ** 2)
-        logging.info("Node: {0}, Segment: {1}, Dist: {2}".format(segment, p, dist))
+    # current_location_cartesian = gps_to_ecef_custom(float(current_location[0]), float(current_location[1]))
+    # nodes_cartesian = [gps_to_ecef_custom(float(node[0]), float(node[1])) for node in nodes]
+    # for p in nodes_cartesian:
+    #     dist = math.sqrt((segment[0] - p[0]) ** 2 + (segment[1] - p[1]) ** 2)
+    #     logging.info("Node: {0}, Segment: {1}, Dist: {2}".format(segment, p, dist))
 
-    distance_array = np.array([path_distance_minimization(segment, p) for p in nodes_cartesian])
+    # distance_array = np.array([path_distance_minimization(segment, p) for p in nodes_cartesian])
+    segment_as_geo = segments_cartesian_to_geo[segment]
+    current_location_float = (float(current_location[0]), float(current_location[1]))
+
+    for p in nodes:
+        curr_p = (float(p[0]), float(p[1]))
+        curr_dist = geodesic(segment_as_geo, curr_p)
+        num_id = location_to_id[curr_p]
+        logging.info("Num Node: {0}, Location: {1}, Segment: {2} ,Coordinates: {3}".format(num_id, curr_dist,
+                                                                                           segment_as_geo, curr_p))
+
+    distance_list = []
+    for p in nodes:
+        curr_p = (float(p[0]), float(p[1]))
+        if abs(current_location_float[0] - curr_p[0]) > 1e-30 and \
+                abs(current_location_float[1] - curr_p[1]) > 1e-30:
+            distance_list.append(curr_p)
+
+    distance_array = np.array([geodesic(segment_as_geo, p) for p in distance_list])
     distance_array = distance_array[distance_array != 0]
     indices = np.argpartition(distance_array, k + 1)
     logging.info("Length of nodes_cartesian: {0}, Distance array: {1}, Indices: {2}".
-                 format(len(nodes_cartesian), len(distance_array), len(indices)))
+                 format(len(nodes), len(distance_array), len(indices)))
 
-    logging.info("Lengths of arrays: Distances: {0}, Nodes: {1}".format(len(distance_array), len(nodes_cartesian)))
+    logging.info("Lengths of arrays: Distances: {0}, Nodes: {1}".format(len(distance_array), len(nodes)))
     min_total = float('inf')
     min_path = []
     min_node_id = 0
     min_node = None
-    starting_id = location_to_id[(float(current_location[0]), float(current_location[1]))]
+    starting_id = location_to_id[current_location_float]
     logging.info("Current starting node: {0}".format(starting_id))
     for i in range(0, k):
         logging.info("K: {0}, Length of indices: {1}".format(k, len(indices)))
-        logging.info("Index: {0}, Number of cartesian nodes: {1}".format(indices[i], len(nodes_cartesian)))
-        if nodes_cartesian[indices[i]] is not None and \
-                ((abs(current_location_cartesian[0] - nodes_cartesian[indices[i]][0]) > 1e-20)
-                 and (abs(current_location_cartesian[1] - nodes_cartesian[indices[i]][1]) > 1e-20)):
-            current_node = nodes[indices[i]]
+        logging.info("Index: {0}, Number of cartesian nodes: {1}".format(indices[i], len(nodes)))
+        if distance_list[indices[i]] is not None:
+            # \
+                # and \
+                # ((abs(nodes[0] - nodes[indices[i]][0]) > 1e-20)
+                #  and (abs(nodes[1] - nodes[indices[i]][1]) > 1e-20)):
+            current_node = distance_list[indices[i]]
             curr_dist = distance_array[indices[i]]
             node_id = location_to_id[(float(current_node[0]), float(current_node[1]))]
+
             try:
                 logging.info("Checking node id: {0}, Distance: {1}".format(node_id, curr_dist))
                 total, path = nx.single_source_dijkstra(graph, source=current_location, target=current_node)
@@ -612,7 +670,6 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
     :param nodes:
     :return:
     '''
-    global cartesian_to_geo
     nodes = list(nodes_id_to_location.values())
     current_location = get_starting_node(current_location, nodes)
     path = [current_location]
@@ -655,7 +712,11 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
         #     leftovers.append(compute_remaining_segment(next_segment, length, seg_length))
 
         # print("Path Length: {0}, Segment Length: {1}".format(length, seg_length))
-        logger.info("Path Num: {0}, Path: {1}".format(cnt, dijkstra_path))
+        node_ids = []
+        for loc in dijkstra_path:
+            node_ids.append(location_to_id[(float(loc[0]), float(loc[1]))])
+
+        logger.info("Path Num: {0}, Path: {1}, Node Ids: {2}".format(cnt, dijkstra_path, node_ids))
         if cnt == 0:
             dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path])
         else:

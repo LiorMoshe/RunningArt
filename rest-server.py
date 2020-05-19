@@ -62,12 +62,15 @@ def send_nodes():
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_drawing():
+        reset_maps()
         initial_pos = request.json[POSITION_KEY]
         distance = request.json[DISTANCE_KEY]
         print(initial_pos)
         print("Received distance: ", distance/1000)
         ways,intersections_nodes_idx = local_convert(initial_pos, distance/1000)
+        print(len(ways))
         intersections_nodes_idx = list(intersections_nodes_idx)
+        intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, distance/1000)
         intersections_nodes_idx = initialize_ways_graph(ways, intersections_nodes_idx)
 
         required_average = compute_average_distance(intersections_nodes_idx)
@@ -104,7 +107,7 @@ def send_drawing():
         out, dijkstra_paths = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments, intersections_nodes_idx, threshold=required_average)
         updated_paths = append_ids_to_paths(dijkstra_paths)
         print("Paths: ", dijkstra_paths)
-        return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths})
+        return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths, "nodes_map":get_nodes_map()})
 
 
 if __name__ == '__main__':
