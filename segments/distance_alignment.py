@@ -95,7 +95,7 @@ def remove_redundancies(polyline):
     for idx, point in enumerate(polyline):
         current_edge = None
         if idx > 0:
-            current_edge = set([polyline[idx-1], point])
+            current_edge = set([polyline[idx-1],point])
         if not is_visited[point]:
             is_visited[point] = True
         elif all(value for value in is_visited.values()) and current_edge in visited_edges:
