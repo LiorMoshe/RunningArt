@@ -10,7 +10,7 @@ from geopy.distance import geodesic
 
 from algorithm.segment import SegmentHistory
 from osm.bounding_box_calculation import *
-
+from segments.utils import is_straight_path, compute_latlong_angle, deg2rad, mod
 
 # formatter = logging.Formatter('%(message)s')
 
@@ -79,19 +79,9 @@ def get_intersection_nodes_with_ways(current_location=[]):
     return result.ways, result.nodes
 
 def get_nodes_map():
-    # if len(float_nodeid_to_loc) != 0:
-    #     if -242 in float_nodeid_to_loc:
-    #         print("Located")
-    #     return float_nodeid_to_loc
-
-    print("RUNNING")
     for id, node_loc in nodes_id_to_location.items():
-        if id == -242:
-            print("FOUND -242")
         float_nodeid_to_loc[id] = [float(node_loc[0]), float(node_loc[1])]
 
-    if -242 in float_nodeid_to_loc:
-        print("Located")
     return float_nodeid_to_loc
 
 def reset_maps():
@@ -417,10 +407,7 @@ def get_next_segment(segments, leftovers):
         end_cartesian = gps_to_ecef_custom(end_segment_geo[0], end_segment_geo[1])
         segments_cartesian_to_geo[start_cartesian] = start_segment_geo
         segments_cartesian_to_geo[end_cartesian] = end_segment_geo
-
-
-        return [gps_to_ecef_custom(float(seg[0][0]), float(seg[0][1])),
-                gps_to_ecef_custom(float(seg[1][0]), float(seg[1][1]))]
+        return [start_cartesian, end_cartesian]
     else:
         seg = leftovers[0]
         leftovers.remove(seg)
@@ -625,10 +612,7 @@ def choose_optimal_target(graph, current_location, segment, nodes, segment_latlo
 def compute_path_length(path):
     dist = 0
     for idx in range(len(path) - 1):
-        first = gps_to_ecef_custom(float(path[idx][0]), float(path[idx][1]))
-        second = gps_to_ecef_custom(float(path[idx + 1][0]), float(path[idx + 1][1]))
-        dist += math.sqrt((first[0] - second[0]) ** 2 + (first[1] - second[1]) ** 2)
-        # dist += get_lat_long_dist(float(path[idx][0]),float(path[idx][1]),float(path[idx+1][0]),float(path[idx+1][1])) * 1000
+        dist += geodesic((float(path[idx][0]), float(path[idx][1])), (float(path[idx + 1][0]), float(path[idx + 1][1]))).meters
     return dist
 
 def compute_remaining_segment(segment, length, segment_length):
@@ -660,6 +644,28 @@ def append_ids_to_paths(dijkstra_paths):
             updated_path.append({"id": location_to_id[(point[0], point[1])], "loc": point})
         updated_paths.append(updated_path)
     return updated_paths
+
+
+
+def handle_long_paths(path, segment):
+    """
+    Compute the length of the path and the segment.
+    If the path is a straight line and its way longer. Compute the end point and add
+    it to the graph with a matching node.
+    This happens in cases where the structure of the graph forces us to take paths that are way longer
+    than the lengths of the given segment.
+    :param path:
+    :param segment:
+    :return:
+    """
+    seg_length = math.sqrt((segment[0][0] - segment[1][0]) ** 2 +
+                               (segment[0][1] - segment[1][1]) ** 2)
+    path_length = compute_path_length(path)
+    print("Path Length: {0}, Segment Length: {1}".format(path_length, seg_length))
+    logging.info("Path Length: {0}, Segment Length: {1}".format(path_length, seg_length))
+
+    # Decide on some ratio between them.
+
 
 def algorithm(current_location, segments, intersections_nodes_idx, threshold=10):
     '''
@@ -707,6 +713,14 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
             dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes,
                                                                      k=5, seg_length=seg_length)
 
+        is_straight = is_straight_path(dijkstra_path)
+        print("Is Straight Path: {0}".format(is_straight))
+
+        if is_straight:
+            rotate_segments_based_on_path(segments, dijkstra_path, current_location, segments_cartesian_to_geo[next_segment[1]])
+
+
+        # handle_long_paths(dijkstra_path,next_segment)
         # if ((seg_length - length) > threshold):
         #     print("PASSED LENGTH TEST")
         #     leftovers.append(compute_remaining_segment(next_segment, length, seg_length))
@@ -738,6 +752,22 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
 
     return float_path, dijkstra_paths
 
+def find_shortest_angle_diff(source, target):
+    return mod((target - source +180), 360) - 180
+
+
+def rotate_segments_based_on_path(segments, path, start_segment, end_segment):
+    path_angle = compute_latlong_angle(deg2rad(float(path[0][0])), deg2rad(float(path[0][1])),
+                                        deg2rad(float(path[1][0])), deg2rad(float(path[1][1])))
+
+    seg_angle = compute_latlong_angle(deg2rad(float(start_segment[0])), deg2rad(float(start_segment[1])),
+                                         deg2rad(float(end_segment[0])), deg2rad(float(end_segment[1])))
+
+    # Need to align the segments according to the paths angle.
+    counter_clock_diff = find_shortest_angle_diff(seg_angle, path_angle)
+    print("Source Angle: {0}, Target Angle: {1}, Diff: {2}".format(seg_angle, path_angle, counter_clock_diff))
+
+
 
 def gps_to_ecef_custom(lat, lon):
     rad_lat = lat * (math.pi / 180.0)
@@ -756,8 +786,17 @@ def gps_to_ecef_custom(lat, lon):
 
 
 if __name__ == "__main__":
-    path = [(Decimal('32.0595662'), Decimal('34.7693194')), (
-    Decimal('32.05913935001895964660434401594102382659912109375'),
-    Decimal('34.76938890032428020049337646923959255218505859375'))]
-    length = compute_path_length(path)
-    print("length: ", length)
+    # x = (32.0595662, 34.7693194)
+    # y = (33.0595662, 34.7693194)
+    # z = geodesic(x, y)
+    # path = [(Decimal('32.0595662'), Decimal('34.7693194')), (
+    # Decimal('32.05913935001895964660434401594102382659912109375'),
+    # Decimal('34.76938890032428020049337646923959255218505859375'))]
+    # length = compute_path_length(path)
+    # print("length: ", length)
+
+    # paths = [[32.060333, 34.7696562], [32.059973100007376, 34.76969955017055]]
+    # seg_start = [32.060333, 34.7696562]
+    # end = [32.062333, 34.7656562]
+    print(find_shortest_angle_diff(120, 240))
+

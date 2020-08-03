@@ -112,3 +112,67 @@ def preprocess_segments(polyline):
         # if (idx < len(polyline) - 1):
         connected_segments.append((polyline[idx % len(polyline)], polyline[(idx + 1) % len(polyline)]))
     return connected_segments
+
+def gps_to_ecef_custom(lat, lon):
+    rad_lat = lat * (math.pi / 180.0)
+    rad_lon = lon * (math.pi / 180.0)
+
+    a = 6378137.0
+    finv = 298.257223563
+    f = 1 / finv
+    e2 = 1 - (1 - f) * (1 - f)
+    v = a / math.sqrt(1 - e2 * math.sin(rad_lat) * math.sin(rad_lat))
+
+    x = (v) * math.cos(rad_lat) * math.cos(rad_lon)
+    y = (v) * math.cos(rad_lat) * math.sin(rad_lon)
+
+    return (x, y)
+
+def deg2rad(deg):
+    return deg * math.pi / 180
+
+def rad2deg(rad):
+    return rad * 180 / math.pi
+
+def compute_latlong_angle(lat1, long1, lat2, long2):
+    d_long = long2-long1
+    y = math.sin(d_long) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(d_long)
+    brng = math.atan2(y,x)
+    brng = rad2deg(brng)
+    brng = (brng + 360) % 360 # count degrees counter-clockwise - remove to make clockwise
+    brng = 360 - brng
+    return brng
+
+def mod(a, n):
+    return a - math.floor(a/n) * n
+
+def is_straight_path(path, threshold=45):
+    """
+    Check if the given path is straight. This is done by checking the angles between each pair
+    of consecutive nodes.
+    We wish that every pair of nodes may differ in their angle by less than 45 degrees.
+    :param path:
+    :return:
+    """
+    angle = None
+    for i in range(len(path)-1):
+        curr_point = path[i]
+        next_point = path[i+1]
+
+        curr_angle = compute_latlong_angle(deg2rad(float(curr_point[0])),deg2rad(float(curr_point[1])),
+                                           deg2rad(float(next_point[0])),deg2rad(float(next_point[1])))
+
+        print("Current Angle: {0}, Previous one: {1}".format(curr_angle, angle))
+
+        if angle is not None:
+            diff = abs(angle - curr_angle)
+            if diff > threshold:
+                return False
+
+        angle = curr_angle
+
+    return True
+
+if __name__ == "__main__":
+    pass
