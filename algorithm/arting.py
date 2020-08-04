@@ -448,14 +448,15 @@ def initialize_graph_for_dijkstra(seg1, seg2, intersections_nodes_idx):
     seg_length = math.sqrt((seg1[0] - seg2[0]) ** 2 + (seg1[1] - seg2[1]) ** 2)
     for id, node in nodes_id_to_location.items():
         if id in intersections_nodes_idx:
-            node_car = gps_to_ecef_custom(float(node[0]), float(node[1]))
-            dist = min(math.sqrt((node_car[0] - seg1[0]) ** 2 + (node_car[1] - seg1[1]) ** 2),
-                       math.sqrt((node_car[0] - seg2[0]) ** 2 + (node_car[1] - seg2[1]) ** 2))
+            cartesian_node = gps_to_ecef_custom(float(node[0]), float(node[1]))
+            dist = min(math.sqrt((cartesian_node[0] - seg1[0]) ** 2 + (cartesian_node[1] - seg1[1]) ** 2),
+                       math.sqrt((cartesian_node[0] - seg2[0]) ** 2 + (cartesian_node[1] - seg2[1]) ** 2))
 
             # Heuristic- Choose only the nodes which are closer to one of the end point of the segments.
             if (dist <= seg_length * 4):
                 for other_node_id in nodes_ways[id]:
                     if other_node_id in intersections_nodes_idx:
+                        logging.info("Adding edge from {0} to {1}, real: {2} {3}".format(id, other_node_id, node, nodes_id_to_location[other_node_id]))
                         g.add_edge(node, nodes_id_to_location[other_node_id],
                                    weight=cost_function(node, nodes_id_to_location[other_node_id], seg1, seg2, 1, 1, 1))
         counter += 1
@@ -577,15 +578,19 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
             current_node = valid_nodes[indices[i]]
             curr_dist = distance_array[indices[i]]
             node_id = location_to_id[(float(current_node[0]), float(current_node[1]))]
+            current_node = nodes_id_to_location[node_id]
 
             try:
                 logging.info("Checking node id: {0}, Distance: {1}".format(node_id, curr_dist))
+                current_node = (Decimal(current_node[0]), Decimal(current_node[1]))
                 total, path = nx.single_source_dijkstra(graph, source=current_location, target=current_node)
                 logging.info("Path to node {0} has total cost of {1}".format(node_id, total))
 
                 path_len = compute_path_length(path)
 
                 # Prioritize paths that are of equal length to the segment.
+                logging.info("SegLength: {0} PathLength: {1}".format(seg_length, path_len))
+                logging.info("Difference in path length: {0}".format(abs(path_len - seg_length)))
                 total = total * Decimal(max(abs(path_len - seg_length), 1))
 
                 logging.info(
@@ -602,6 +607,7 @@ def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_len
                     min_node = current_node
             except nx.NetworkXNoPath:
                 logging.info("No path to node. Id: {0}, Location: {1}, Distance: {2}".format(node_id, current_node, curr_dist))
+                logging.info("LocFrom {0} LocTo {1}".format(current_location, current_node))
 
     # Check if there is no path to any node.
     if min_node is None:
@@ -693,9 +699,10 @@ def algorithm(current_location, segments, threshold=10):
         segment = SegmentHistory(next_segment[0], next_segment[1])
         segment.set_start_node(current_location)
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1], intersections_nodes_idx)
-        logging.info("Finished initializing graph for dijkstra.")
-        seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
-                               (next_segment[0][1] - next_segment[1][1]) ** 2)
+        seg_length = geodesic(segments_cartesian_to_geo[next_segment[0]], segments_cartesian_to_geo[next_segment[1]]).meters
+        logging.info("Finished initializing graph for dijkstra, next segment: {0}, SegLength: {1}".format(next_segment, seg_length))
+        # seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
+        #                        (next_segment[0][1] - next_segment[1][1]) ** 2)
 
         # Check if the segment is already in cache.
         dijkstra_path = None
