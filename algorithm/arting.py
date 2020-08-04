@@ -557,14 +557,16 @@ def choose_optimal_target(graph, current_location, segment, nodes, segment_latlo
         logging.info("Num Node: {0}, Location: {1}, Segment: {2} ,Coordinates: {3}".format(num_id, curr_dist,
                                                                                            segment_as_geo, curr_p))
 
-    distance_list = []
+    # Filter out locations that are exactly on the current location.
+    valid_nodes = []
     for p in nodes:
         curr_p = (float(p[0]), float(p[1]))
         if abs(current_location_float[0] - curr_p[0]) > 1e-30 and \
                 abs(current_location_float[1] - curr_p[1]) > 1e-30:
-            distance_list.append(curr_p)
+            valid_nodes.append(curr_p)
 
-    distance_array = np.array([geodesic(segment_as_geo, p) for p in distance_list])
+    # Compute distance of available nodes from the end of the current segment.
+    distance_array = np.array([geodesic(segment_as_geo, p) for p in valid_nodes])
     distance_array = distance_array[distance_array != 0]
     indices = np.argpartition(distance_array, k + 1)
     logging.info("Length of nodes_cartesian: {0}, Distance array: {1}, Indices: {2}".
@@ -577,17 +579,14 @@ def choose_optimal_target(graph, current_location, segment, nodes, segment_latlo
     min_node = None
     starting_id = location_to_id[current_location_float]
     logging.info("Current starting node: {0}".format(starting_id))
-    for i in range(0, k):
+    for i in range(k):
         logging.info("K: {0}, Length of indices: {1}".format(k, len(indices)))
         logging.info("Index: {0}, Number of cartesian nodes: {1}".format(indices[i], len(nodes)))
-        if distance_list[indices[i]] is not None:
-            # \
-                # and \
-                # ((abs(nodes[0] - nodes[indices[i]][0]) > 1e-20)
-                #  and (abs(nodes[1] - nodes[indices[i]][1]) > 1e-20)):
-            current_node = distance_list[indices[i]]
+        if valid_nodes[indices[i]] is not None:
+            current_node = valid_nodes[indices[i]]
             curr_dist = distance_array[indices[i]]
             node_id = location_to_id[(float(current_node[0]), float(current_node[1]))]
+            current_node = nodes_id_to_location[node_id]
 
             try:
                 logging.info("Checking node id: {0}, Distance: {1}".format(node_id, curr_dist))
@@ -684,9 +683,10 @@ def algorithm(current_location, segments, intersections_nodes_idx, threshold=10)
         segment = SegmentHistory(next_segment[0], next_segment[1])
         segment.set_start_node(current_location)
         graph = initialize_graph_for_dijkstra(next_segment[0], next_segment[1], intersections_nodes_idx)
-        logging.info("Finished initializing graph for dijkstra.")
-        seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
-                               (next_segment[0][1] - next_segment[1][1]) ** 2)
+        seg_length = geodesic(segments_cartesian_to_geo[next_segment[0]], segments_cartesian_to_geo[next_segment[1]]).meters
+        logging.info("Finished initializing graph for dijkstra, next segment: {0}, SegLength: {1}".format(next_segment, seg_length))
+        # seg_length = math.sqrt((next_segment[0][0] - next_segment[1][0]) ** 2 +
+        #                        (next_segment[0][1] - next_segment[1][1]) ** 2)
 
         # Check if the segment is already in cache.
         dijkstra_path = None
