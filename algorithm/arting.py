@@ -517,7 +517,7 @@ def get_mid_point(lat1, lon1, lat2, lon2):
     lonMid = lon1 + math.atan2(By, math.cos(lat1) + Bx)
     return (latMid * 180 / math.pi, lonMid * 180 / math.pi)
 
-def choose_optimal_target(graph, current_location, segment, nodes, segment_latlon=None,k=10, seg_length=0.0):
+def choose_optimal_target(graph, current_location, segment, nodes, k=10, seg_length=0.0):
     """
     Go over the k closest nodes to the end of the given segment and return the one
     which results in the path with the lowest cost.
@@ -540,21 +540,24 @@ def choose_optimal_target(graph, current_location, segment, nodes, segment_latlo
     segment_as_geo = segments_cartesian_to_geo[segment]
     current_location_float = (float(current_location[0]), float(current_location[1]))
 
-    for p in nodes:
-        curr_p = (float(p[0]), float(p[1]))
-        curr_dist = geodesic(segment_as_geo, curr_p)
-        num_id = location_to_id[curr_p]
-        logging.info("Num Node: {0}, Location: {1}, Segment: {2} ,Coordinates: {3}".format(num_id, curr_dist,
-                                                                                           segment_as_geo, curr_p))
+    # Used for debugging.
+    # for p in nodes:
+    #     curr_p = (float(p[0]), float(p[1]))
+    #     curr_dist = geodesic(segment_as_geo, curr_p)
+    #     num_id = location_to_id[curr_p]
+    #     logging.info("Num Node: {0}, Location: {1}, Segment: {2} ,Coordinates: {3}".format(num_id, curr_dist,
+    #                                                                                        segment_as_geo, curr_p))
 
-    distance_list = []
+    # Filter out locations that are exactly on the current location.
+    valid_nodes = []
     for p in nodes:
         curr_p = (float(p[0]), float(p[1]))
         if abs(current_location_float[0] - curr_p[0]) > 1e-30 and \
                 abs(current_location_float[1] - curr_p[1]) > 1e-30:
-            distance_list.append(curr_p)
+            valid_nodes.append(curr_p)
 
-    distance_array = np.array([geodesic(segment_as_geo, p) for p in distance_list])
+    # Compute distance of available nodes from the end of the current segment.
+    distance_array = np.array([geodesic(segment_as_geo, p) for p in valid_nodes])
     distance_array = distance_array[distance_array != 0]
     indices = np.argpartition(distance_array, k + 1)
     logging.info("Length of nodes_cartesian: {0}, Distance array: {1}, Indices: {2}".
@@ -567,15 +570,11 @@ def choose_optimal_target(graph, current_location, segment, nodes, segment_latlo
     min_node = None
     starting_id = location_to_id[current_location_float]
     logging.info("Current starting node: {0}".format(starting_id))
-    for i in range(0, k):
+    for i in range(k):
         logging.info("K: {0}, Length of indices: {1}".format(k, len(indices)))
         logging.info("Index: {0}, Number of cartesian nodes: {1}".format(indices[i], len(nodes)))
-        if distance_list[indices[i]] is not None:
-            # \
-                # and \
-                # ((abs(nodes[0] - nodes[indices[i]][0]) > 1e-20)
-                #  and (abs(nodes[1] - nodes[indices[i]][1]) > 1e-20)):
-            current_node = distance_list[indices[i]]
+        if valid_nodes[indices[i]] is not None:
+            current_node = valid_nodes[indices[i]]
             curr_dist = distance_array[indices[i]]
             node_id = location_to_id[(float(current_node[0]), float(current_node[1]))]
 
@@ -586,7 +585,7 @@ def choose_optimal_target(graph, current_location, segment, nodes, segment_latlo
 
                 path_len = compute_path_length(path)
 
-                # print("Distance diff: ", path_len - seg_length)
+                # Prioritize paths that are of equal length to the segment.
                 total = total * Decimal(max(abs(path_len - seg_length), 1))
 
                 logging.info(
@@ -717,11 +716,12 @@ def algorithm(current_location, segments, threshold=10):
             dijkstra_path, node_near_segment = choose_optimal_target(graph, current_location, next_segment[1], nodes,
                                                                      k=5, seg_length=seg_length)
 
-        is_straight = is_straight_path(dijkstra_path)
-        print("Is Straight Path: {0}".format(is_straight))
+        # TODO- Use this in the future when I will recall what it does.
+        # is_straight = is_straight_path(dijkstra_path)
+        # print("Is Straight Path: {0}".format(is_straight))
 
-        if is_straight:
-            rotate_segments_based_on_path(segments, dijkstra_path, current_location, segments_cartesian_to_geo[next_segment[1]])
+        # if is_straight:
+        #     rotate_segments_based_on_path(segments, dijkstra_path, current_location, segments_cartesian_to_geo[next_segment[1]])
 
 
         # handle_long_paths(dijkstra_path,next_segment)
