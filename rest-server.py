@@ -4,10 +4,12 @@ import io
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS, cross_origin
 from flask_httpauth import HTTPBasicAuth
+from osm.nodes_manager import NodesManager
 
 from algorithm.arting import *
 from segments.cv_contours import *
 from segments.utils import *
+from algorithm.fit_algorithm import FitAlgorithm
 # from osm.bounding_box_calculation import *
 
 #example client request: curl -u running:art -F "file=@valtho.jpeg" -i http://localhost:5000/polylines
@@ -48,14 +50,17 @@ def not_found(error):
 
 nodes = None
 converted_nodes = None
+fit_algorithm = None
+nodes_manager = None
 required_average = None
 
 @app.route('/nodes', methods = ['GET'])
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_nodes():
-    return jsonify({"nodes_map": get_nodes_map()})
+    return jsonify({"nodes_map": get_nodes_map(nodes_manager)})
     # return jsonify({"nodes": convert_nodes_to_float(nodes)})
+
 
 
 @app.route('/polylines', methods = ['POST'])
@@ -93,15 +98,15 @@ def send_drawing():
     decimal_polyline = convert_polyline_to_decimal(geo_polyline)
     connected_segments = preprocess_segments(decimal_polyline)
     print("Connected segments: ",connected_segments)
-    out, dijkstra_paths = algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])), connected_segments,
-                                    threshold=required_average)
-    updated_paths = append_ids_to_paths(dijkstra_paths)
-    print("Paths: ", dijkstra_paths)
-    return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths, "nodes_map": get_nodes_map()})
+    fit_algorithm.set_segments(connected_segments)
+    out, dijkstra_paths = fit_algorithm.algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])))
+    updated_paths = append_ids_to_paths(dijkstra_paths, nodes_manager)
+    return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths, "nodes_map": get_nodes_map(nodes_manager)})
 
 if __name__ == '__main__':
     ways, nodes = get_intersection_nodes_with_ways()
-    # nodes = get_intersection_nodes()
-    intersection_nodes_idx = initialize_ways_graph(ways)
-    required_average = compute_average_distance(intersection_nodes_idx)
+    nodes_manager = NodesManager()
+    nodes_manager.initialize_ways_graph(ways)
+    required_average = compute_average_distance(nodes_manager)
+    fit_algorithm = FitAlgorithm(nodes_manager)
     app.run()
