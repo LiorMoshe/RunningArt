@@ -94,7 +94,7 @@ class NodesManager(object):
                             mid_location_to_id[min_node_decimal] = curr_id
                             new_ids[curr_id] = [node_id, neighbor_id]
                             curr_id -= 1
-                            # nodes_id_to_location[curr_id] = (Decimal(mid_node[0]), Decimal(mid_node[1]))
+
         for loc, id in mid_location_to_id.items():
             self.nodes_id_to_location[id] = loc
             self.location_to_id[(loc[0], loc[1])] = id
