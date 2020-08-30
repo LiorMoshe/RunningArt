@@ -2,12 +2,8 @@ import logging
 import math
 import os.path
 from decimal import Decimal
-
 from scipy import spatial
-
-from osm.bounding_box_calculation import *
-
-intersections_nodes_idx = [286643475, 317214411, 357500272, 357545243, 366653136, 799417137, 286643440, 286643458, 286643460, 366651300, 366652380, 366652746, 366653067, 366653799, 1571764097, 1628430688, 1628430723, 4170418930, 366652962, 540420234, 540420265, 540420291, 366654065, 366654066, 540419840, 2470061832, 406399586, 540419838, 540419855, 1574692678, 2294948482, 540419958, 286643465, 286741983, 549271109, 1574692741, 1574692746, 1574692918, 286542239, 286542525, 286543443, 286754329, 496176171, 1628430716, 1672351167, 4582891013, 496176315, 496176455, 799417353, 366653165, 366653693, 1628430719, 540421284, 540421320, 1628430692, 286643451, 357536696, 366651462, 286643444, 366651463, 357538387, 1672351158, 2108063257, 357538922, 357536485, 366651303, 366651349, 496176172, 540420824, 366652262, 366652516, 496176174, 2139244077, 2470061834, 1628430689, 1628430687, 1628430710, 1628430720, 2470061831, 412522566, 496176177, 2470061851, 2469958099, 286643432, 4833025980, 2139244073, 7052661053, 514357166, 366649858, 384695042, 1995922116, 1995922128, 1995922151, 2470061837, 3999875641]
+from geopy.distance import geodesic
 
 # formatter = logging.Formatter('%(message)s')
 
@@ -31,36 +27,9 @@ logger = setup_logger('first_logger', 'logger.log')
 logger = logging.getLogger('first_logger')
 
 nearest_nodes = {}
-
 minus_id = -1
-
 float_nodeid_to_loc = {}
 
-def get_intersection_nodes_with_ways(current_location=[]):
-    api = overpy.Overpass()
-    result = api.query("""
-     <osm-script>
-  <union into="_">
-    <query into="_" type="way">
-          <bbox-query e="34.773" n="32.060" s="32.057" w="34.768"/>
-      <has-kv k="highway" modv="" v="residential"/>
-    </query>
-    <query into="_" type="way">
-          <bbox-query e="34.773" n="32.060" s="32.057" w="34.768"/>
-      <has-kv k="highway" modv="" v="tertiary"/>
-    </query>
-        <query into="_" type="way">
-          <bbox-query e="34.773" n="32.060" s="32.057" w="34.768"/>
-      <has-kv k="highway" modv="" v="pedestrian"/>
-    </query>
-  </union>
-  <print e="" from="_" geometry="skeleton" ids="yes" limit="" mode="meta" n="" order="id" s="" w=""/>
-  <recurse from="_" into="_" type="down"/>
-  <print e="" from="_" geometry="skeleton" ids="yes" limit="" mode="meta" n="" order="quadtile" s="" w=""/>
-</osm-script>
-            """)
-    print("done ways")
-    return result.ways, result.nodes
 
 def get_nodes_map(node_manager):
     nodes_id_to_location = node_manager.get_nodes_map()
@@ -111,46 +80,6 @@ def get_intersection_nodes_from_file(current_location=[], filename="./resources/
     else:
         return write_nodes_to_file(current_location, filename)
 
-
-'''
-Get the nodes out of osm's map. Currently it is fixed.
-'''
-def get_intersection_nodes(current_location=[]):
-    api = overpy.Overpass()
-    # TODO: change bounding box per each query based on the current location
-    # TODO: Loading this information when the user enters to the app
-
-    result = api.query("""
- <osm-script>
-<query type="way" into="hw">
-  <has-kv k="highway"/>
-  <has-kv k="highway" modv="not" regv="footway|cycleway|path|service|track"/>
-<bbox-query e="-73.986" n="40.767" s="40.758" w="-73.997"/> 
-</query>
-
-<foreach from="hw" into="w">
-  <recurse from="w" type="way-node" into="ns"/>
-  <recurse from="ns" type="node-way" into="w2"/>
-  <query type="way" into="w2">
-    <item set="w2"/>
-    <has-kv k="highway"/>
-    <has-kv k="highway" modv="not" regv="footway|cycleway|path|service|track"/>
-  </query>
-  <difference into="wd">
-    <item set="w2"/>
-    <item set="w"/>
-  </difference>
-  <recurse from="wd" type="way-node" into="n2"/>
-  <recurse from="w"  type="way-node" into="n3"/>
-  <query type="node">
-    <item set="n2"/>
-    <item set="n3"/>
-  </query>
-  <print/>
-</foreach>
-  </osm-script>
-    """)
-    return [(node.lat, node.lon) for node in result.nodes]
 
 def compute_average_distance(nodes_manager):
     """

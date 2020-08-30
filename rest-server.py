@@ -1,5 +1,6 @@
 import base64
 import io
+import time
 
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS, cross_origin
@@ -7,10 +8,10 @@ from flask_httpauth import HTTPBasicAuth
 from osm.nodes_manager import NodesManager
 
 from algorithm.arting import *
+from algorithm.osm import *
 from segments.cv_contours import *
 from segments.utils import *
 from algorithm.fit_algorithm import FitAlgorithm
-# from osm.bounding_box_calculation import *
 
 #example client request: curl -u running:art -F "file=@valtho.jpeg" -i http://localhost:5000/polylines
 
@@ -71,6 +72,16 @@ def send_drawing():
     initial_pos = request.json[POSITION_KEY]
     distance = request.json[DISTANCE_KEY]
 
+    start_time = time.time()
+    intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, distance / 1000)
+    print("--- %s seconds ---" % (time.time() - start_time))
+    ways, nodes = intersection_nodes_with_ways(initial_pos, distance / 1000)
+    print("--- %s seconds ---" % (time.time() - start_time))
+    nodes_manager = NodesManager(intersections_nodes_idx)
+    nodes_manager.initialize_ways_graph(ways)
+    required_average = compute_average_distance(nodes_manager)
+    fit_algorithm = FitAlgorithm(nodes_manager)
+
     # Parse base64 image url.
     if IMAGE_KEY in request.json:
         imageStr = request.json[IMAGE_KEY].split('base64,', 1)[1]
@@ -104,9 +115,4 @@ def send_drawing():
     return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths, "nodes_map": get_nodes_map(nodes_manager)})
 
 if __name__ == '__main__':
-    ways, nodes = get_intersection_nodes_with_ways()
-    nodes_manager = NodesManager()
-    nodes_manager.initialize_ways_graph(ways)
-    required_average = compute_average_distance(nodes_manager)
-    fit_algorithm = FitAlgorithm(nodes_manager)
     app.run()
