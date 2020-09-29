@@ -68,7 +68,7 @@ def diff_based_rotation(seg_start, seg_end, node_start, node_end,segments):
     diff = node_angle - seg_angle
 
     # Do not rotate if the difference is too wide, it will ruin the whole figure.
-    if abs(diff) > math.pi/8:
+    if abs(diff) > math.pi/4:
         return segments
     points = []
     for i in range(len(segments)):

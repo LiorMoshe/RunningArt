@@ -259,7 +259,38 @@ class FitAlgorithm(object):
         return [start_cartesian, end_cartesian]
 
 
-    def algorithm(self, current_location,use_rotation=True):
+    def continuation(self, chosen_node):
+        current_end = self.segments_cartesian_to_geo[self.current_segment[1]]
+        current_end = (Decimal(current_end[0]), Decimal(current_end[1]))
+
+        possible_angles = []
+        for seg in self.segments:
+            if current_end == seg[0]:
+                seg_end = seg[1]
+                angle = math.atan2(float(seg_end[1]) - float(current_end[1]), float(seg_end[0]) - float(current_end[0]))
+                possible_angles.append(angle)
+
+        chosen_node_float = (float(chosen_node[0]), float(chosen_node[1]))
+        node_id_to_loc = self.node_manager.get_nodes_map()
+        node_id = self.node_manager.get_node_id(chosen_node_float)
+        neigh_ids = self.node_manager.get_nodes_ways()[node_id]
+        print(neigh_ids)
+        print(possible_angles)
+
+        # Check the angles of the neighbors of this node.
+        found = set()
+        for neigh_id in neigh_ids:
+            neigh_loc = node_id_to_loc[neigh_id]
+            angle = math.atan2(float(chosen_node[1]) - float(neigh_loc[1]), float(chosen_node[0]) - float(neigh_loc[0]))
+
+            for possible_angle in possible_angles:
+                if abs(angle - possible_angle) <= math.pi / 8:
+                    found.add(possible_angle)
+
+        if len(found) != len(possible_angles):
+            print("SHITTTTTTTTTT NODE ID: {0}".format(node_id))
+
+    def algorithm(self, current_location,use_rotation=True, use_continuation=True):
         current_location = get_closest_node(current_location, self.node_manager.get_nodes())
         location_to_id = self.node_manager.get_location_to_id_map()
         path = [current_location]
@@ -275,7 +306,6 @@ class FitAlgorithm(object):
                 processed_points.append((lla_end[0], lla_end[1]))
 
             self.current_segment = (self.current_segment[0], self.current_segment[1])
-
             dijkstra_path, next_node = self.step(current_location)
             node_ids = []
             for loc in dijkstra_path:
@@ -288,16 +318,19 @@ class FitAlgorithm(object):
                 if idx > 0:
                     path.append(point)
 
-            # TODO- This is where we rotate the segments following the choice of the node.
             current_location_ecef = list(navpy.lla2ecef(float(current_location[0]), float(current_location[1]),0))
             current_location_ecef = (current_location_ecef[0], current_location_ecef[1])
-
             next_node_ecef = list(navpy.lla2ecef(float(next_node[0]), float(next_node[1]), 0))
             next_node_ecef = (next_node_ecef[0], next_node_ecef[1])
+
+            # Forward the choice of our node if current choice makes no sense.
+            if use_continuation:
+                self.continuation(next_node)
 
             if use_rotation:
                 self.segments = diff_based_rotation(self.current_segment[0], self.current_segment[1],
                                 current_location_ecef,next_node_ecef,self.segments)
+
 
             # Update the current location to be the end of the chosen path.
             current_location = next_node

@@ -99,7 +99,7 @@ def send_drawing():
     connected_segments = preprocess_segments(decimal_polyline)
     print("Connected segments: ",connected_segments)
     fit_algorithm.set_segments(connected_segments)
-    out, dijkstra_paths = fit_algorithm.algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])))
+    out, dijkstra_paths = fit_algorithm.algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])),  use_rotation=False)
     updated_paths = append_ids_to_paths(dijkstra_paths, nodes_manager)
     return jsonify({"segments": fit_algorithm.processed, "result": out, "paths": updated_paths, "nodes_map": get_nodes_map(nodes_manager)})
 

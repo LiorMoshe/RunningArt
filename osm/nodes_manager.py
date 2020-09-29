@@ -72,6 +72,9 @@ class NodesManager(object):
     def get_nodes_map(self):
         return self.nodes_id_to_location
 
+    def get_node_id(self,loc):
+        return self.location_to_id[loc]
+
     def get_mid_nodes(self, intersections_nodes):
         global minus_id
         initial_id = minus_id
