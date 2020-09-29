@@ -5,18 +5,21 @@ import geopy
 import math
 from PIL import Image
 import time
+from numpy import random
+import cv2
 
 # south_lat, west_long, north_lat, east_long
-coordinates = 32.05909518216471,34.76966961513913,32.059996994204475,34.77072857795746
+coordinates = 32.05882463852773, 34.76935192629364, 32.060267537791354, 34.771046266802955
 location_node = (32.05954608820065, 34.770199096548296)
 distance = 0.08
-distance_threshold = 100
+distance_threshold = 90
 line_distance_threshold = 1
 target_nodes_coordinates = []
 coordinates_to_pixels = {}
 lines = []
-binary_data = []
-
+dimension = int(distance*1000*2)
+binary_data = random.randint(0, 1, (dimension, dimension))
+binary_data[0]=0
 
 class Line(object):
     '''
@@ -96,6 +99,7 @@ def preprocessing_ways(location_node):
 
 preprocessing_ways(location_node)
 
+time1 = time.time()
 
 def generate_binary_image():
     #starting from the south west cornerof the bounding box
@@ -107,43 +111,47 @@ def generate_binary_image():
     #calculating starting coordinates array for each line in the image we will create
     starting_coordinates_array = [current_coordinates]
     tmp_coordinates = current_coordinates
-    num_of_iterations = int(distance*2000) - 1
+    num_of_iterations = dimension - 1
     for i in range(num_of_iterations):
         destination = geopy.distance.distance(kilometers=0.001).destination((tmp_coordinates[0], tmp_coordinates[1]), 0)
         tmp_coordinates = (destination.latitude, destination.longitude)
         starting_coordinates_array.append(tmp_coordinates)
     #fill the binary image matrix
     for i in range(0, len(starting_coordinates_array)):
-        time1 = time.time()
+        #time1 = time.time()
         current_coordinates = (starting_coordinates_array[i][0], starting_coordinates_array[i][1])
-        for j in range(int(distance*2*1000)):
+        for j in range(dimension):
             point = navpy.lla2ecef(float(current_coordinates[0]), float(current_coordinates[1]), 0)
             near_road = False
             for line in lines:
                 dis = distance_from_point_to_line(point, line.parameters)
                 if dis < line_distance_threshold and is_between(line.p1, point, line.p2):
                     near_road = True
-                    # for target_node in target_nodes_coordinates:
-                    #     if geodesic((current_coordinates[0], current_coordinates[1]), target_node).meters < 0.5:
-                    #         coordinates_to_pixels[(current_coordinates[0], current_coordinates[1])] = (point[0], point[1])
-                    #         break
+                    deleted_nodes = []
+                    for target_node in target_nodes_coordinates:
+                        if geodesic((current_coordinates[0], current_coordinates[1]), target_node).meters < 1.5:
+                            deleted_nodes.append(target_node)
+                            print((current_coordinates[0], current_coordinates[1]),target_node)
+                            coordinates_to_pixels[(current_coordinates[0], current_coordinates[1])] = (i, j)
+                    for item in deleted_nodes:
+                        target_nodes_coordinates.remove(item)
                     break
-            binary_data.append(0) if near_road else binary_data.append(1)
+            binary_data[i][j] = 0 if near_road else 1
+
             destination = geopy.distance.distance(kilometers=0.001).destination((current_coordinates[0], current_coordinates[1]), 90)
             current_coordinates = (destination.latitude, destination.longitude)
-        time2 = time.time()
-        print('function took {:.3f} ms'.format((time2 - time1) * 1000.0))
+        # time2 = time.time()
+        # print('function took {:.3f} ms'.format((time2 - time1) * 1000.0))
 
-
+    time2 = time.time()
+    print('function took {:.3f} ms'.format((time2 - time1) * 1000.0))
 generate_binary_image()
-binary_data[:] = [binary_data[i:i + 160] for i in range(0, 160*160, 160)]
 img = Image.new('1', (160, 160))
 pixels = img.load()
 for i in range(img.size[0]):
     for j in range(img.size[1]):
-        pixels[i, j] = binary_data[i][j]
+        tmp = binary_data[i, j].item()
+        pixels[i, j] = tmp
 img.show()
+
 print(coordinates_to_pixels)
-
-
-
