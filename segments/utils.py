@@ -144,7 +144,6 @@ def compute_latlong_angle(lat1, long1, lat2, long2):
     brng = math.atan2(y,x)
     brng = rad2deg(brng)
     brng = (brng + 360) % 360 # count degrees counter-clockwise - remove to make clockwise
-    brng = 360 - brng
     return brng
 
 def mod(a, n):
