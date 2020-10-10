@@ -53,7 +53,7 @@ def preprocessing_ways(coordinates):
                 next_node = way_nodes[idx + 1]
                 neighboring_nodes.append((node, next_node))
 
-def get_node_index(starting_pos, node, dimension):
+def get_node_index(starting_pos, node, dimension, scale):
     """
     Given the starting position of our bounding box (southwest location) compute the indices
     of the given node in the binary matrix where the starting position is at (0,0).
@@ -67,24 +67,23 @@ def get_node_index(starting_pos, node, dimension):
     dist = geodesic(starting_pos, (node[0], node[1])).meters
     if angle >= 0 and angle <= 90:
         angle *= math.pi / 180
-        row = int(dist * math.cos(angle))
-        col = int(dist * math.sin(angle))
+        row = int(dist * math.cos(angle) / scale)
+        col = int(dist * math.sin(angle) / scale)
         if row >= dimension or col >= dimension:
             return None
         return (row,col)
     else:
         return None
 
-def generate_binary_matrix(coordinates, distance, freq=0.001):
+def generate_binary_matrix(coordinates, distance, freq=0.001, scale=1):
     """
     Initialize the full matrix to be zeroes and go over only the relevant roads.
     Assumes that the relevant ways were already processed and pairs of neighboring nodes
     are saved in neighboring_nodes.
-
     :return:
     """
     start_time = time.time()
-    dimension = int(distance * 1000 * 2)
+    dimension = int(distance * 1000 * 2 / scale)
     southwest = (coordinates[0], coordinates[1])
     binary_data = np.zeros((dimension, dimension))
 
@@ -94,8 +93,8 @@ def generate_binary_matrix(coordinates, distance, freq=0.001):
         first_node = (first_node.lat, first_node.lon)
         second_node = (second_node.lat, second_node.lon)
 
-        first_node_indices = get_node_index(southwest, first_node, dimension)
-        second_node_indices = get_node_index(southwest, second_node, dimension)
+        first_node_indices = get_node_index(southwest, first_node, dimension, scale)
+        second_node_indices = get_node_index(southwest, second_node, dimension, scale)
 
         # Mark the indices of the nodes as ones that we have roads in them.
         if first_node_indices is not None:
@@ -126,7 +125,7 @@ def generate_binary_matrix(coordinates, distance, freq=0.001):
                 dest = geopy.distance.distance(kilometers=freq * i).destination(
                     start, nodes_angle)
                 dest = (dest.latitude, dest.longitude)
-                dest_indices = get_node_index(southwest, dest, dimension)
+                dest_indices = get_node_index(southwest, dest, dimension, scale)
                 if dest_indices is None:
                     break
 
@@ -144,7 +143,7 @@ if __name__=="__main__":
     preprocessing_ways(coordinates)
 
     # Compute the binary matrix and display it.
-    binary_data = generate_binary_matrix(coordinates, distance)
+    binary_data = generate_binary_matrix(coordinates, distance, scale=2)
     img = Image.new('1', (binary_data.shape[0], binary_data.shape[1]))
     pixels = img.load()
     for i in range(img.size[0]):
