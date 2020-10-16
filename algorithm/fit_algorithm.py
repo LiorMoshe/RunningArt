@@ -54,6 +54,7 @@ class FitAlgorithm(object):
         Set the current set of segments that we must perform fitting to.
         :return:
         """
+        print("CurrentSegments: {0}".format(segments))
         self.segments = segments
 
     def search_in_cache(self, segment_history):

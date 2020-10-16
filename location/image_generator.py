@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import overpy
 from geopy.distance import geodesic
 import geopy
@@ -7,6 +9,7 @@ import time
 import numpy as np
 from algorithm.osm import bbox_calculation
 from segments.utils import compute_latlong_angle
+from location.convolution import find_starting_location
 
 # Holds all the pairs of nodes that are next to one another.
 neighboring_nodes = []
@@ -75,6 +78,122 @@ def get_node_index(starting_pos, node, dimension, scale):
     else:
         return None
 
+def get_position_from_indices(starting_pos, indices, scale):
+    result = geopy.distance.distance(kilometers=(scale/1000) * indices[0]).destination(
+                starting_pos, 0)
+
+    result = geopy.distance.distance(kilometers=(scale / 1000) * indices[1]).destination(
+        result, 90)
+
+    return (result.latitude, result.longitude)
+
+def fill_image_based_on_road(start_point, end_point, image_data, image_start_pos, dimension, scale, freq=0.001, nodes_indices=[],
+                             save_nodes=False):
+    """
+    Fill the data of a given image based on a road between two points.
+    :param start_point:
+    :param end_point:
+    :param image_data:
+    :param image_start_pos:
+    :param dimension:
+    :param scale:
+    :return:
+    """
+    start_indices = get_node_index(image_start_pos, start_point, dimension, scale)
+    end_indices = get_node_index(image_start_pos, end_point, dimension, scale)
+
+    # Mark the indices of the nodes as ones that we have roads in them.
+    if start_indices is not None:
+        if save_nodes:
+            nodes_indices.append(start_indices)
+        image_data[start_indices[0], start_indices[1]] = 1
+
+    if end_indices is not None:
+        if save_nodes:
+            nodes_indices.append(end_indices)
+        image_data[end_indices[0], end_indices[1]] = 1
+
+    start = None
+    end = None
+    if start_indices is not None and end_indices is not None:
+        start = start_point
+        end = end_point
+    elif start_indices is None and end_indices is not None:
+        start = end_point
+        end = start_point
+    elif start_indices is not None and end_indices is None:
+        start = start_point
+        end = end_point
+
+    # Iterate over the linear line connected both nodes and mark it as a part of the road.
+    # Size of each jump in the line is determined based on the size of freq.
+    if start is not None and end is not None:
+        nodes_angle = compute_latlong_angle(start[0], start[1], end[0], end[1])
+        nodes_dist = geodesic(start, end).kilometers
+        jumps = int(nodes_dist / freq)
+        for i in range(1, jumps + 1):
+            dest = geopy.distance.distance(kilometers=freq * i).destination(
+                start, nodes_angle)
+            dest = (dest.latitude, dest.longitude)
+            dest_indices = get_node_index(image_start_pos, dest, dimension, scale)
+            if dest_indices is None:
+                break
+
+            image_data[dest_indices[0], dest_indices[1]] = 1
+
+
+def generate_segments_image(segments, coordinates, dimension, scale=1, freq=0.001):
+    """
+    Given the current segments, generate the matching image starting from the southwest corner.
+    We must create an image of a similar scale to the scale of the image of the total area.
+
+    TODO- Return initial segment location in the future, not all routes start at (0,0).
+
+    :param segments: Ordered points of segments.
+    :return: Image and location
+    """
+    image_data = np.zeros((dimension, dimension))
+    southwest = (coordinates[0], coordinates[1])
+
+    if len(segments) == 0:
+        return image_data
+
+    point = segments[0]
+    for i in range(1,len(segments)):
+        next_point = segments[i]
+        fill_image_based_on_road(point, next_point, image_data, southwest, dimension, scale, freq)
+        point = next_point
+
+    # Take the same image and substract it to a smaller matrix.
+    min_row = float('inf')
+    max_row = float('-inf')
+    min_col = float('inf')
+    max_col = float('-inf')
+
+    for i in range(image_data.shape[0]):
+        for j in range(image_data.shape[1]):
+            if image_data[i][j]:
+                if i < min_row:
+                    min_row = i
+
+                if i > max_row:
+                    max_row = i
+
+                if j < min_col:
+                    min_col = j
+
+                if j > max_col:
+                    max_col = j
+
+
+    if min_row == max_row:
+        max_row += 1
+
+    if min_col == max_col:
+        max_col += 1
+
+    return image_data[min_row:max_row, min_col:max_col]
+
 def generate_binary_matrix(coordinates, distance, freq=0.001, scale=1):
     """
     Initialize the full matrix to be zeroes and go over only the relevant roads.
@@ -87,70 +206,54 @@ def generate_binary_matrix(coordinates, distance, freq=0.001, scale=1):
     southwest = (coordinates[0], coordinates[1])
     binary_data = np.zeros((dimension, dimension))
 
+    # Holds all the indices of the nodes in the created image.
+    nodes_indices = []
+
+
     # Go over each pair of neighboring nodes.
     for pair in neighboring_nodes:
         first_node, second_node = pair
         first_node = (first_node.lat, first_node.lon)
         second_node = (second_node.lat, second_node.lon)
 
-        first_node_indices = get_node_index(southwest, first_node, dimension, scale)
-        second_node_indices = get_node_index(southwest, second_node, dimension, scale)
-
-        # Mark the indices of the nodes as ones that we have roads in them.
-        if first_node_indices is not None:
-            binary_data[first_node_indices[0], first_node_indices[1]] = 1
-
-        if second_node_indices is not None:
-            binary_data[second_node_indices[0], second_node_indices[1]] = 1
-
-        start = None
-        end = None
-        if first_node_indices is not None and second_node_indices is not None:
-            start = first_node
-            end = second_node
-        elif first_node_indices is None and second_node_indices is not None:
-            start = second_node
-            end = first_node
-        elif first_node_indices is not None and second_node_indices is None:
-            start=first_node
-            end=second_node
-
-        # Iterate over the linear line connected both nodes and mark it as a part of the road.
-        # Size of each jump in the line is determined based on the size of freq.
-        if start is not None and end is not None:
-            nodes_angle = compute_latlong_angle(start[0], start[1], end[0], end[1])
-            nodes_dist = geodesic(start, end).kilometers
-            jumps = int(nodes_dist / freq)
-            for i in range(1,jumps+1):
-                dest = geopy.distance.distance(kilometers=freq * i).destination(
-                    start, nodes_angle)
-                dest = (dest.latitude, dest.longitude)
-                dest_indices = get_node_index(southwest, dest, dimension, scale)
-                if dest_indices is None:
-                    break
-
-                binary_data[dest_indices[0], dest_indices[1]] = 1
+        fill_image_based_on_road(first_node, second_node, binary_data, southwest, dimension, scale, freq, nodes_indices, True)
 
     print('function took {:.3f} ms'.format((time.time() - start_time) * 1000.0))
-    return binary_data
+    return binary_data, nodes_indices
+
+segments_data = [((Decimal('32.05955764855389844569799606688320636749267578125'), Decimal('34.76934540354852032351118396036326885223388671875')), (Decimal('32.05899271950649875861927284859120845794677734375'), Decimal('34.76934540354852032351118396036326885223388671875'))), ((Decimal('32.05899271950649875861927284859120845794677734375'), Decimal('34.76934540354852032351118396036326885223388671875')), (Decimal('32.05842779045909907154054963029921054840087890625'), Decimal('34.76934540354852032351118396036326885223388671875'))), ((Decimal('32.05842779045909907154054963029921054840087890625'), Decimal('34.76934540354852032351118396036326885223388671875')), (Decimal('32.0580012376790222106137662194669246673583984375'), Decimal('34.7694162528002408407701295800507068634033203125'))), ((Decimal('32.0580012376790222106137662194669246673583984375'), Decimal('34.7694162528002408407701295800507068634033203125')), (Decimal('32.0579521097425867992569692432880401611328125'), Decimal('34.76999991393653743898539687506854534149169921875'))), ((Decimal('32.0579521097425867992569692432880401611328125'), Decimal('34.76999991393653743898539687506854534149169921875')), (Decimal('32.0579521097425867992569692432880401611328125'), Decimal('34.7705151785426238575382740236818790435791015625')))]
 
 if __name__=="__main__":
+    #preprocess_segments.
+    curr_segments = []
+    for seg in segments_data:
+        print(seg[0])
+        curr_segments.append((float(seg[0][0]), float(seg[0][1])))
+    curr_segments.append((float(segments_data[len(segments_data)-1][1][0]),float(segments_data[len(segments_data)-1][1][1])))
+
+
     location_node = (32.05954608820065, 34.770199096548296)
     distance = 0.2
     coordinates = bbox_calculation(location_node, distance)
+    print("Coordinates ", coordinates)
+    segments_image = generate_segments_image(curr_segments, coordinates, int(distance * 1000 * 2), 1)
+
 
     # Process all the relevant ways.
     preprocessing_ways(coordinates)
 
     # Compute the binary matrix and display it.
-    binary_data = generate_binary_matrix(coordinates, distance, scale=2)
-    img = Image.new('1', (binary_data.shape[0], binary_data.shape[1]))
-    pixels = img.load()
-    for i in range(img.size[0]):
-        for j in range(img.size[1]):
-            tmp = int(binary_data[i, j].item())
-            pixels[i, j] = tmp
-
-    # TODO- Given image is rotated by 90 degrees.
-    img = img.transpose(Image.ROTATE_90)
-    img.show()
+    binary_data, indices = generate_binary_matrix(coordinates, distance, scale=1)
+    opt = find_starting_location(binary_data, segments_image, indices, (0,0))
+    print(get_position_from_indices((coordinates[0], coordinates[1]), opt, 1))
+    # img = Image.new('1', (binary_data.shape[0], binary_data.shape[1]))
+    # img = Image.new('1', (segments_image.shape[0], segments_image.shape[1]))
+    # pixels = img.load()
+    # for i in range(img.size[0]):
+    #     for j in range(img.size[1]):
+    #         tmp = int(segments_image[i, j].item())
+    #         pixels[i, j] = tmp
+    #
+    # # TODO- Given image is rotated by 90 degrees.
+    # img = img.transpose(Image.ROTATE_90)
+    # img.show()
