@@ -85,7 +85,7 @@ def send_drawing():
     start_time = time.time()
     km_distance = distance/1000
     print("Requesting intersection_nodes_idx")
-    intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, km_distance)
+    intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, km_distance, file=True)
     print("--- %s seconds ---" % (time.time() - start_time))
     print("Requesting with ways, nodes_idx: {0}".format(len(intersections_nodes_idx)))
     ways, nodes = intersection_nodes_with_ways(initial_pos, km_distance)
