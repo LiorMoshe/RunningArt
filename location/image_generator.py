@@ -9,6 +9,7 @@ import time
 import numpy as np
 from algorithm.osm import bbox_calculation
 from segments.utils import compute_latlong_angle
+from location.spread_matrix import nearestOne
 from location.convolution import find_starting_location
 
 # Holds all the pairs of nodes that are next to one another.
@@ -146,9 +147,7 @@ def generate_segments_image(segments, coordinates, dimension, scale=1, freq=0.00
     """
     Given the current segments, generate the matching image starting from the southwest corner.
     We must create an image of a similar scale to the scale of the image of the total area.
-
     TODO- Return initial segment location in the future, not all routes start at (0,0).
-
     :param segments: Ordered points of segments.
     :return: Image and location
     """
@@ -194,7 +193,7 @@ def generate_segments_image(segments, coordinates, dimension, scale=1, freq=0.00
 
     return image_data[min_row:max_row, min_col:max_col]
 
-def generate_binary_matrix(coordinates, distance, freq=0.001, scale=1):
+def generate_binary_matrix(coordinates, distance, nodes_manager,freq=0.001, scale=1):
     """
     Initialize the full matrix to be zeroes and go over only the relevant roads.
     Assumes that the relevant ways were already processed and pairs of neighboring nodes
@@ -209,6 +208,7 @@ def generate_binary_matrix(coordinates, distance, freq=0.001, scale=1):
     # Holds all the indices of the nodes in the created image.
     nodes_indices = []
 
+    neighboring_nodes = nodes_manager.get_neighboring_nodes()
 
     # Go over each pair of neighboring nodes.
     for pair in neighboring_nodes:
@@ -221,39 +221,57 @@ def generate_binary_matrix(coordinates, distance, freq=0.001, scale=1):
     print('function took {:.3f} ms'.format((time.time() - start_time) * 1000.0))
     return binary_data, nodes_indices
 
-segments_data = [((Decimal('32.05955764855389844569799606688320636749267578125'), Decimal('34.76934540354852032351118396036326885223388671875')), (Decimal('32.05899271950649875861927284859120845794677734375'), Decimal('34.76934540354852032351118396036326885223388671875'))), ((Decimal('32.05899271950649875861927284859120845794677734375'), Decimal('34.76934540354852032351118396036326885223388671875')), (Decimal('32.05842779045909907154054963029921054840087890625'), Decimal('34.76934540354852032351118396036326885223388671875'))), ((Decimal('32.05842779045909907154054963029921054840087890625'), Decimal('34.76934540354852032351118396036326885223388671875')), (Decimal('32.0580012376790222106137662194669246673583984375'), Decimal('34.7694162528002408407701295800507068634033203125'))), ((Decimal('32.0580012376790222106137662194669246673583984375'), Decimal('34.7694162528002408407701295800507068634033203125')), (Decimal('32.0579521097425867992569692432880401611328125'), Decimal('34.76999991393653743898539687506854534149169921875'))), ((Decimal('32.0579521097425867992569692432880401611328125'), Decimal('34.76999991393653743898539687506854534149169921875')), (Decimal('32.0579521097425867992569692432880401611328125'), Decimal('34.7705151785426238575382740236818790435791015625')))]
+
+def save_image(image_name, image_data):
+    img = Image.new('1', (image_data.shape[0], image_data.shape[1]))
+    pixels = img.load()
+    for i in range(img.size[0]):
+        for j in range(img.size[1]):
+            tmp = int(image_data[i, j].item())
+            pixels[i, j] = tmp
+
+    # TODO- Given image is rotated by 90 degrees.
+    img = img.transpose(Image.ROTATE_90)
+    img.save(image_name)
+segments_data = [((Decimal('32.05949153225217429508120403625071048736572265625'), Decimal('34.7689903147888088597028399817645549774169921875')), (Decimal('32.05897201385528916262046550400555133819580078125'), Decimal('34.7689764726551260309861390851438045501708984375'))), ((Decimal('32.05897201385528916262046550400555133819580078125'), Decimal('34.7689764726551260309861390851438045501708984375')), (Decimal('32.0584154316375844473441247828304767608642578125'), Decimal('34.76899031471020151684570009820163249969482421875'))), ((Decimal('32.0584154316375844473441247828304767608642578125'), Decimal('34.76899031471020151684570009820163249969482421875')), (Decimal('32.058358296501097584041417576372623443603515625'), Decimal('34.76949840190848561860548215918242931365966796875'))), ((Decimal('32.058358296501097584041417576372623443603515625'), Decimal('34.76949840190848561860548215918242931365966796875')), (Decimal('32.058358296501097584041417576372623443603515625'), Decimal('34.7699479656932197713103960268199443817138671875'))), ((Decimal('32.058358296501097584041417576372623443603515625'), Decimal('34.7699479656932197713103960268199443817138671875')), (Decimal('32.058358296501097584041417576372623443603515625'), Decimal('34.76949840190848561860548215918242931365966796875'))), ((Decimal('32.058358296501097584041417576372623443603515625'), Decimal('34.76949840190848561860548215918242931365966796875')), (Decimal('32.0584154316375844473441247828304767608642578125'), Decimal('34.76899031471020151684570009820163249969482421875'))), ((Decimal('32.0584154316375844473441247828304767608642578125'), Decimal('34.76899031471020151684570009820163249969482421875')), (Decimal('32.05897201385528916262046550400555133819580078125'), Decimal('34.7689764726551260309861390851438045501708984375'))), ((Decimal('32.05897201385528916262046550400555133819580078125'), Decimal('34.7689764726551260309861390851438045501708984375')), (Decimal('32.05897377235773859638356952928006649017333984375'), Decimal('34.76959622351788681271500536240637302398681640625'))), ((Decimal('32.05897377235773859638356952928006649017333984375'), Decimal('34.76959622351788681271500536240637302398681640625')), (Decimal('32.05897201385528916262046550400555133819580078125'), Decimal('34.7689764726551260309861390851438045501708984375'))), ((Decimal('32.05897201385528916262046550400555133819580078125'), Decimal('34.7689764726551260309861390851438045501708984375')), (Decimal('32.05949153225217429508120403625071048736572265625'), Decimal('34.7689903147888088597028399817645549774169921875'))), ((Decimal('32.05949153225217429508120403625071048736572265625'), Decimal('34.7689903147888088597028399817645549774169921875')), (Decimal('32.0595452856531863972122664563357830047607421875'), Decimal('34.76954978937900619939682655967772006988525390625'))), ((Decimal('32.0595452856531863972122664563357830047607421875'), Decimal('34.76954978937900619939682655967772006988525390625')), (Decimal('32.0595452856531863972122664563357830047607421875'), Decimal('34.76989610413392028931411914527416229248046875')))]
 
 if __name__=="__main__":
-    #preprocess_segments.
-    curr_segments = []
-    for seg in segments_data:
-        print(seg[0])
-        curr_segments.append((float(seg[0][0]), float(seg[0][1])))
-    curr_segments.append((float(segments_data[len(segments_data)-1][1][0]),float(segments_data[len(segments_data)-1][1][1])))
-
-
-    location_node = (32.05954608820065, 34.770199096548296)
-    distance = 0.2
-    coordinates = bbox_calculation(location_node, distance)
-    print("Coordinates ", coordinates)
-    segments_image = generate_segments_image(curr_segments, coordinates, int(distance * 1000 * 2), 1)
-
-
-    # Process all the relevant ways.
-    preprocessing_ways(coordinates)
-
-    # Compute the binary matrix and display it.
-    binary_data, indices = generate_binary_matrix(coordinates, distance, scale=1)
-    opt = find_starting_location(binary_data, segments_image, indices, (0,0))
-    print(get_position_from_indices((coordinates[0], coordinates[1]), opt, 1))
-    # img = Image.new('1', (binary_data.shape[0], binary_data.shape[1]))
-    # img = Image.new('1', (segments_image.shape[0], segments_image.shape[1]))
-    # pixels = img.load()
-    # for i in range(img.size[0]):
-    #     for j in range(img.size[1]):
-    #         tmp = int(segments_image[i, j].item())
-    #         pixels[i, j] = tmp
+    # segments = [(32.059545907506724, 34.769338084235166), (32.058984780936086, 34.769338084235166),
+    #  (32.058563936008106, 34.769338084235166), (32.058283372722784, 34.769338084235166),
+    #  (32.05800280943746, 34.769338084235166), (32.05772224615214, 34.769338084235166),
+    #  (32.057441682866816, 34.769338084235166), (32.057161119581494, 34.769338084235166),
+    #  (32.05688055629617, 34.769338084235166), (32.05659999301085, 34.769338084235166),
+    #  (32.056325246224254, 34.76946403594408), (32.056192647003066, 34.77014379439682),
+    #  (32.056192647003066, 34.770805868793545), (32.056192647003066, 34.771302424591084),
+    #  (32.056192647003066, 34.7716708595883)]
     #
-    # # TODO- Given image is rotated by 90 degrees.
-    # img = img.transpose(Image.ROTATE_90)
-    # img.show()
+    # seg_img = generate_segments_image(segments, (32.05412772649942, 34.76298168819518, 32.06494947098929, 34.775689240965605),
+    #                         int(0.6*1000*2))
+
+    # save_image("mycoolimg.png", seg_img)
+
+    api = overpy.Overpass(url='http://52.56.65.199/api/interpreter')
+    query = """
+         <osm-script>
+      <union into="_">
+        <query into="_" type="way">
+              <bbox-query e="-73.986" n="40.767" s="40.758" w="-73.997"/>
+          <has-kv k="highway" modv="" v="residential"/>
+        </query>
+        <query into="_" type="way">
+              <bbox-query e="-73.986" n="40.767" s="40.758" w="-73.997"/>
+          <has-kv k="highway" modv="" v="tertiary"/>
+        </query>
+            <query into="_" type="way">
+              <bbox-query e="-73.986" n="40.767" s="40.758" w="-73.997"/>
+          <has-kv k="highway" modv="" v="pedestrian"/>
+        </query>
+      </union>
+      <print e="" from="_" geometry="skeleton" ids="yes" limit=""  n="" order="id" s="" w=""/>
+      <recurse from="_" into="_" type="down"/>
+      <print e="" from="_" geometry="skeleton" ids="yes" limit=""  n="" order="quadtile" s="" w=""/>
+    </osm-script>
+                """
+    result = api.query(query)
+    print(len(result.ways))
+    print(len(result.nodes))

@@ -26,6 +26,10 @@ class NodesManager(object):
         self.intersections_nodes_idx = nodes_of_intersections
 
 
+        # Saves pairs of neighboring nodes, this data structure is used in our image generation algorithm.
+        self.neighboring_nodes = []
+
+
     def get_nodes(self):
         return list(self.nodes_id_to_location.values())
 
@@ -35,10 +39,17 @@ class NodesManager(object):
     def get_location_to_id_map(self):
         return self.location_to_id
 
+    def get_neighboring_nodes(self):
+        return self.neighboring_nodes
+
     def initialize_ways_graph(self, ways):
         for way in ways:
             way_nodes = way.nodes
             for idx, node in enumerate(way_nodes):
+                # Save all the pairs of neighboring nodes.
+                if idx < len(way_nodes) - 1:
+                    self.neighboring_nodes.append((node, way_nodes[idx + 1]))
+
                 if node.id in self.intersections_nodes_idx:
                     if node.id not in self.nodes_id_to_location:
                         self.nodes_id_to_location[node.id] = (Decimal(node.lat), Decimal(node.lon))
