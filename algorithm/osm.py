@@ -2,8 +2,8 @@ import geopy
 import overpy
 from geopy.distance import geodesic
 
-server_url = "http://52.56.65.199/api/interpreter"
-# server_url = "https://overpass.kumi.systems/api/interpreter"
+# server_url = "http://52.56.65.199/api/interpreter"
+server_url = "https://overpass.kumi.systems/api/interpreter"
 
 
 def bbox_calculation(location_node, km_distance):
@@ -70,7 +70,7 @@ def get_intersection_nodes_idx(location_node, km_distance, file=True):
 
 def intersection_nodes_with_ways(location_node, km_distance):
     south_lat, west_long, north_lat, east_long = bbox_calculation(location_node,km_distance)
-    api = overpy.Overpass(url='http://52.56.65.199/api/interpreter')
+    api = overpy.Overpass(url=server_url)
     bbox = '<bbox-query e=%s n=%s s=%s w=%s/>' % ('\"'+str(east_long)+'\"','\"'+str(north_lat)+'\"','\"'+str(south_lat)+'\"','\"'+str(west_long)+'\"')
     query = """
      <osm-script>
@@ -88,9 +88,9 @@ def intersection_nodes_with_ways(location_node, km_distance):
       <has-kv k="highway" modv="" v="pedestrian"/>
     </query>
   </union>
-  <print e="" from="_" geometry="skeleton" ids="yes" limit="" n="" order="id" s="" w=""/>
+  <print e="" from="_" geometry="skeleton" ids="yes" limit="" mode="meta" n="" order="id" s="" w=""/>
   <recurse from="_" into="_" type="down"/>
-  <print e="" from="_" geometry="skeleton" ids="yes" limit="" n="" order="quadtile" s="" w=""/>
+  <print e="" from="_" geometry="skeleton" ids="yes" limit="" mode="meta" n="" order="quadtile" s="" w=""/>
 </osm-script>
             """ % (bbox, bbox, bbox)
     result = api.query(query)

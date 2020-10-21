@@ -130,7 +130,7 @@ class FitAlgorithm(object):
         """
         Go over the k closest nodes to the end of the given segment and return the one
         which results in the path with the lowest cost.
-        Expects to get the segment in cartesian coordnates.
+        Expects to get the segment in cartesian coordinates.
         :param current_location:
         :param k:
         :return:
@@ -167,6 +167,8 @@ class FitAlgorithm(object):
         min_node = None
         starting_id = location_to_id[current_location_float]
         logging.info("Current starting node: {0}".format(starting_id))
+
+        # Go over k closest nodes to the end location.
         for i in range(k):
             logging.info("K: {0}, Length of indices: {1}".format(k, len(indices)))
             logging.info("Index: {0}, Number of cartesian nodes: {1}".format(indices[i], len(nodes)))
@@ -226,7 +228,6 @@ class FitAlgorithm(object):
 
         # Check if there is a matching path in the cache, if there is not choose a target and execute dijkstra search.
         dijkstra_path = self.search_in_cache(segment_history)
-        next_node = None
         if dijkstra_path is not None:
             next_node = dijkstra_path[len(dijkstra_path) - 1]
         else:
