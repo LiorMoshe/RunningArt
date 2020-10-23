@@ -1,11 +1,11 @@
-from geopy.distance import geodesic
-
-from segments.utils import *
-from algorithm.segment import SegmentHistory
 import logging
+
+import navpy
 import networkx as nx
-import math
-from decimal import Decimal
+
+from algorithm.rotation import diff_based_rotation
+from algorithm.segment import SegmentHistory
+from segments.utils import *
 
 
 def setup_logger(name, log_file, level=logging.INFO):
@@ -49,6 +49,8 @@ class FitAlgorithm(object):
         # Map each cartesian segment to its geocentric equivalent. TODO- This is temporarily used.
         self.segments_cartesian_to_geo = {}
 
+        self.processed = []
+
     def set_segments(self, segments):
         """
         Set the current set of segments that we must perform fitting to.
@@ -88,24 +90,26 @@ class FitAlgorithm(object):
 
         for id, node in nodes_id_to_location.items():
             if id in intersection_nodes_idx:
-                cartesian_node = gps_to_ecef_custom(float(node[0]), float(node[1]))
+                cartesian_node = navpy.lla2ecef(float(node[0]), float(node[1]),0)
+                cartesian_node = [cartesian_node[0], cartesian_node[1]]
                 dist = min(math.sqrt((cartesian_node[0] - start_location[0]) ** 2 + (cartesian_node[1] - start_location[1]) ** 2),
                            math.sqrt((cartesian_node[0] - end_location[0]) ** 2 + (cartesian_node[1] - end_location[1]) ** 2))
 
-                # Heuristic- Choose only the nodes which are closer to one of the end point of the segments.
                 if (dist <= seg_length * 4):
                     for other_node_id in nodes_ways[id]:
                         if other_node_id in intersection_nodes_idx:
-                            logging.info("Adding edge from {0} to {1}, real: {2} {3}".format(id, other_node_id, node,
-                                                                                             nodes_id_to_location[
-                                                                                                 other_node_id]))
+                            # logging.info("Adding edge from {0} to {1}, real: {2} {3}".format(id, other_node_id, node,
+                            #                                                                  nodes_id_to_location[
+                            #                                                                      other_node_id]))
                             self.graph.add_edge(node, nodes_id_to_location[other_node_id],
                                        weight=self.cost_function(node, nodes_id_to_location[other_node_id], start_location, end_location, 1, 1,
                                                             1))
 
     def cost_function(self,start_node, end_node, start_location, end_location, alpha, beta, gamma):
-        start_node = gps_to_ecef_custom(float(start_node[0]), float(start_node[1]))
-        end_node = gps_to_ecef_custom(float(end_node[0]), float(end_node[1]))
+        start_node = navpy.lla2ecef(float(start_node[0]), float(start_node[1]), 0)
+        start_node = [start_node[0], start_node[1]]
+        end_node = navpy.lla2ecef(float(end_node[0]), float(end_node[1]), 0)
+        end_node = [end_node[0], end_node[1]]
         c1 = Decimal(alpha * path_distance_minimization(end_node, end_location))
         # todo- Bug in the metric, completely different nodes received different values.
         c3 = distance_sum_minimization(start_node, end_node, start_location, end_location)
@@ -189,15 +193,12 @@ class FitAlgorithm(object):
                     # Prioritize paths that are of equal length to the segment.
                     logging.info("SegLength: {0} PathLength: {1}".format(seg_length, path_len))
                     logging.info("Difference in path length: {0}".format(abs(path_len - seg_length)))
-                    total = total * Decimal(max(abs(path_len - seg_length), 1))
+                    total = total * Decimal(max(abs(path_len - seg_length) ** 2, 1))
 
                     logging.info(
                         "After factoring node {0} has total cost of {1}, min total: {2}".format(node_id, total,
                                                                                                 min_total))
 
-                    # print("Distance of path: {0}, Distance of segment: {1}".format(path_len, seg_length))
-                    # print("Node compared: ", nodes[indices[i]])
-                    # print("Node Id: {0} Index: {1} Comparing, total: {2}, min total: {3}, length of path: {4}".format(node_id,indices[i],total, min_total, len(path)))
                     if total < min_total:
                         logging.info("Found new minimal path, Node Id: {0}, Path cost: {1}".format(node_id, total))
                         min_total = total
@@ -251,45 +252,109 @@ class FitAlgorithm(object):
         start_segment_geo  = (float(curr_segment[0][0]), float(curr_segment[0][1]))
         end_segment_geo = (float(curr_segment[1][0]), float(curr_segment[1][1]))
 
-        start_cartesian = gps_to_ecef_custom(start_segment_geo[0], start_segment_geo[1])
-        end_cartesian = gps_to_ecef_custom(end_segment_geo[0], end_segment_geo[1])
+        start_cartesian = navpy.lla2ecef(start_segment_geo[0], start_segment_geo[1], 0)
+        start_cartesian = (start_cartesian[0], start_cartesian[1], start_cartesian[2])
+        end_cartesian = navpy.lla2ecef(end_segment_geo[0], end_segment_geo[1], 0)
+        end_cartesian = (end_cartesian[0], end_cartesian[1], end_cartesian[2])
         self.segments_cartesian_to_geo[start_cartesian] = start_segment_geo
         self.segments_cartesian_to_geo[end_cartesian] = end_segment_geo
         return [start_cartesian, end_cartesian]
 
 
-    def algorithm(self, current_location):
+    def continuation(self, chosen_node):
+        current_end = self.segments_cartesian_to_geo[self.current_segment[1]]
+        current_end = (Decimal(current_end[0]), Decimal(current_end[1]))
+
+        possible_angles = []
+        for seg in self.segments:
+            if current_end == seg[0]:
+                seg_end = seg[1]
+                angle = math.atan2(float(seg_end[1]) - float(current_end[1]), float(seg_end[0]) - float(current_end[0]))
+                possible_angles.append(angle)
+
+        chosen_node_float = (float(chosen_node[0]), float(chosen_node[1]))
+        node_id_to_loc = self.node_manager.get_nodes_map()
+        node_id = self.node_manager.get_node_id(chosen_node_float)
+        neigh_ids = self.node_manager.get_nodes_ways()[node_id]
+        print(neigh_ids)
+        print(possible_angles)
+
+        # Check the angles of the neighbors of this node.
+        found = set()
+        for neigh_id in neigh_ids:
+            neigh_loc = node_id_to_loc[neigh_id]
+            angle = math.atan2(float(chosen_node[1]) - float(neigh_loc[1]), float(chosen_node[0]) - float(neigh_loc[0]))
+
+            for possible_angle in possible_angles:
+                if abs(angle - possible_angle) <= math.pi / 8:
+                    found.add(possible_angle)
+
+        if len(found) != len(possible_angles):
+            print("SHITTTTTTTTTT NODE ID: {0}".format(node_id))
+
+    def algorithm(self, current_location,use_rotation=True, use_continuation=True):
         current_location = get_closest_node(current_location, self.node_manager.get_nodes())
         location_to_id = self.node_manager.get_location_to_id_map()
         path = [current_location]
         dijkstra_paths = []
-        cnt = 0
+        processed_points = []
         while self.segments:
             self.current_segment = self.get_next_segment()
+
+            # Save lla coordinates of all the processed segments (used for UI)
+            lla_start = navpy.ecef2lla([self.current_segment[0][0], self.current_segment[0][1], self.current_segment[0][2]])
+            lla_end = navpy.ecef2lla([self.current_segment[1][0], self.current_segment[1][1], self.current_segment[1][2]])
+            processed_points.append((lla_start[0], lla_start[1]))
+            if len(self.segments) == 0:
+                processed_points.append((lla_end[0], lla_end[1]))
+
+
+            # Extract the optimal path based on the given segment.
+            self.current_segment = (self.current_segment[0], self.current_segment[1])
             dijkstra_path, next_node = self.step(current_location)
 
+
+            # Print node ids of the computed path. (used for debugging)
             node_ids = []
             for loc in dijkstra_path:
                 node_ids.append(location_to_id[(float(loc[0]), float(loc[1]))])
 
-            logger.info("Path Num: {0}, Path: {1}, Node Ids: {2}".format(cnt, dijkstra_path, node_ids))
-            if cnt == 0:
-                dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path])
-            else:
-                dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path[1:]])
+            logger.info("Path Num: {0}, Path: {1}, Node Ids: {2}".format(len(dijkstra_paths), dijkstra_path, node_ids))
 
+            # Append the currently optimal path to our result.
+            dijkstra_paths.append([[float(point[0]), float(point[1])] for point in dijkstra_path[min(len(dijkstra_paths),1):]])
             for idx, point in enumerate(dijkstra_path):
                 if idx > 0:
                     path.append(point)
 
-            current_location = next_node
-            cnt += 1
+            current_location_ecef = list(navpy.lla2ecef(float(current_location[0]), float(current_location[1]),0))
+            current_location_ecef = (current_location_ecef[0], current_location_ecef[1])
+            next_node_ecef = list(navpy.lla2ecef(float(next_node[0]), float(next_node[1]), 0))
+            next_node_ecef = (next_node_ecef[0], next_node_ecef[1])
 
+            # Forward the choice of our node if current choice makes no sense.
+            if use_continuation:
+                self.continuation(next_node)
+
+            # Rotate the remaining segments based on rotations that are forced by available roads.
+            if use_rotation:
+                self.segments = diff_based_rotation(self.current_segment[0], self.current_segment[1],
+                                current_location_ecef,next_node_ecef,self.segments)
+
+            # Update the current location to be the end of the chosen path.
+            current_location = next_node
+
+        # Construct final output.
         float_path = []
         for point in path:
             float_path.append([float(point[0]), float(point[1])])
 
+        # Save a list of all the segments processed (used for UI).
+        self.processed = processed_points
         return float_path, dijkstra_paths
+
+    def get_processed(self):
+        return self.processed
 
     def reset(self):
         self.segments = []

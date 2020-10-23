@@ -111,7 +111,7 @@ def send_drawing():
 
     # Once we have the required shape, compute, the optimal starting position.
     if dynamic_starting_location:
-        initial_pos = get_optimal_start(initial_pos, geo_polyline, km_distance, nodes_manager, nearest_one_mode=False)
+        initial_pos = get_optimal_start(initial_pos, geo_polyline, km_distance, nodes_manager, nearest_one_mode=True)
         geo_polyline = get_segments_based_on_location(initial_pos, polyline, distance, required_average)
 
 
@@ -120,10 +120,11 @@ def send_drawing():
     connected_segments = preprocess_segments(decimal_polyline)
     print("Connected segments: ",connected_segments)
     fit_algorithm.set_segments(connected_segments)
-    out, dijkstra_paths = fit_algorithm.algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])))
+    out, dijkstra_paths = fit_algorithm.algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])),  use_rotation=True,
+                                                  use_continuation=False)
     print("Finished Algo")
     updated_paths = append_ids_to_paths(dijkstra_paths, nodes_manager)
-    return jsonify({"segments": geo_polyline, "result": out, "paths": updated_paths, "nodes_map": get_nodes_map(nodes_manager)})
+    return jsonify({"segments": fit_algorithm.processed, "result": out, "paths": updated_paths, "nodes_map": get_nodes_map(nodes_manager)})
 
 if __name__ == '__main__':
     app.run()

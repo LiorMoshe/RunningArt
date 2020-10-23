@@ -165,8 +165,6 @@ def is_straight_path(path, threshold=45):
         curr_angle = compute_latlong_angle(deg2rad(float(curr_point[0])),deg2rad(float(curr_point[1])),
                                            deg2rad(float(next_point[0])),deg2rad(float(next_point[1])))
 
-        print("Current Angle: {0}, Previous one: {1}".format(curr_angle, angle))
-
         if angle is not None:
             diff = abs(angle - curr_angle)
             if diff > threshold:
@@ -277,7 +275,3 @@ def compute_path_length(path):
     for idx in range(len(path) - 1):
         dist += geodesic((float(path[idx][0]), float(path[idx][1])), (float(path[idx + 1][0]), float(path[idx + 1][1]))).meters
     return dist
-
-
-if __name__ == "__main__":
-    pass
