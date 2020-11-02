@@ -143,7 +143,7 @@ def compute_latlong_angle(lat1, long1, lat2, long2):
     x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(d_long)
     brng = math.atan2(y,x)
     brng = rad2deg(brng)
-    brng = (brng + 360) % 360 # count degrees counter-clockwise - remove to make clockwise
+    # brng = (brng + 360) % 360 # count degrees counter-clockwise - remove to make clockwise
     return brng
 
 def mod(a, n):
@@ -178,7 +178,7 @@ def is_straight_path(path, threshold=45):
 
 
 def path_distance_minimization(point1, point2):
-    return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+    return math.sqrt((float(point1[0]) - float(point2[0])) ** 2 + (float(point1[1]) - float(point2[1])) ** 2)
 
 def calculate_upper_k(node2, seg1, k, n):
     return np.add((np.subtract(node2, seg1)) * (Decimal((k / n)) * path_distance_minimization(node2, seg1)), seg1)

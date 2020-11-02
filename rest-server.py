@@ -12,6 +12,8 @@ from segments.cv_contours import *
 from segments.utils import *
 from algorithm.fit_algorithm import FitAlgorithm
 import time
+from algorithm.test import simplified_path_algo, brute_algo
+import traceback
 
 #example client request: curl -u running:art -F "file=@valtho.jpeg" -i http://localhost:5000/polylines
 
@@ -78,53 +80,60 @@ def get_segments_based_on_location(starting_pos, polyline, distance, average_roa
 # @auth.login_required
 @cross_origin(origin='localhost',headers=['Content- Type','Authorization'])
 def send_drawing():
-    print("Got Request: ",request)
-    initial_pos = request.json[POSITION_KEY]
-    distance = request.json[DISTANCE_KEY]
+    try:
+        print("Got Request: ",request)
+        initial_pos = request.json[POSITION_KEY]
+        distance = request.json[DISTANCE_KEY]
 
-    start_time = time.time()
-    km_distance = distance/1000
-    print("Requesting intersection_nodes_idx")
-    intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, km_distance, file=True)
-    print("--- %s seconds ---" % (time.time() - start_time))
-    print("Requesting with ways, nodes_idx: {0}".format(len(intersections_nodes_idx)))
-    ways, nodes = intersection_nodes_with_ways(initial_pos, km_distance)
-    print("Ways: {0}, Nodes: {1}".format(len(ways), len(nodes)))
-    print("--- %s seconds ---" % (time.time() - start_time))
-    nodes_manager = NodesManager(intersections_nodes_idx)
-    nodes_manager.initialize_ways_graph(ways)
-    required_average = compute_average_distance(nodes_manager)
-    fit_algorithm = FitAlgorithm(nodes_manager)
-    print("Finished misc")
-    # Parse base64 image url.
-    if IMAGE_KEY in request.json:
-        imageStr = request.json[IMAGE_KEY].split('base64,', 1)[1]
-        msg = base64.b64decode(imageStr)
-        buf = io.BytesIO(msg)
-        img = Image.open(buf)
-        lines = findExternalContours(img)
-        polyline = connect_polylines(lines)
-    else:
-        polyline = text_to_polyline(request.json[TEXT_KEY])
+        start_time = time.time()
+        km_distance = distance/1000
+        print("Requesting intersection_nodes_idx")
+        intersections_nodes_idx = get_intersection_nodes_idx(initial_pos, km_distance, file=True)
+        print("--- %s seconds ---" % (time.time() - start_time))
+        print("Requesting with ways, nodes_idx: {0}".format(len(intersections_nodes_idx)))
+        ways, nodes = intersection_nodes_with_ways(initial_pos, km_distance)
+        print("Ways: {0}, Nodes: {1}".format(len(ways), len(nodes)))
+        print("--- %s seconds ---" % (time.time() - start_time))
+        nodes_manager = NodesManager(intersections_nodes_idx)
+        nodes_manager.initialize_ways_graph(ways)
+        required_average = compute_average_distance(nodes_manager)
+        fit_algorithm = FitAlgorithm(nodes_manager)
+        print("Finished misc")
+        # Parse base64 image url.
+        if IMAGE_KEY in request.json:
+            imageStr = request.json[IMAGE_KEY].split('base64,', 1)[1]
+            msg = base64.b64decode(imageStr)
+            buf = io.BytesIO(msg)
+            img = Image.open(buf)
+            lines = findExternalContours(img)
+            polyline = connect_polylines(lines)
+        else:
+            polyline = text_to_polyline(request.json[TEXT_KEY])
 
-    geo_polyline = get_segments_based_on_location(initial_pos, polyline, distance, required_average)
-
-    # Once we have the required shape, compute, the optimal starting position.
-    if dynamic_starting_location:
-        initial_pos = get_optimal_start(initial_pos, geo_polyline, km_distance, nodes_manager, nearest_one_mode=True)
         geo_polyline = get_segments_based_on_location(initial_pos, polyline, distance, required_average)
 
+        # Once we have the required shape, compute, the optimal starting position.
+        if dynamic_starting_location:
+            initial_pos = get_optimal_start(initial_pos, geo_polyline, km_distance, nodes_manager, nearest_one_mode=True)
+            geo_polyline = get_segments_based_on_location(initial_pos, polyline, distance, required_average)
 
-    # Convert the given segments.
-    decimal_polyline = convert_polyline_to_decimal(geo_polyline)
-    connected_segments = preprocess_segments(decimal_polyline)
-    print("Connected segments: ",connected_segments)
-    fit_algorithm.set_segments(connected_segments)
-    out, dijkstra_paths = fit_algorithm.algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])),  use_rotation=True,
-                                                  use_continuation=False)
-    print("Finished Algo")
-    updated_paths = append_ids_to_paths(dijkstra_paths, nodes_manager)
-    return jsonify({"segments": fit_algorithm.processed, "result": out, "paths": updated_paths, "nodes_map": get_nodes_map(nodes_manager)})
+
+        # Convert the given segments.
+        decimal_polyline = convert_polyline_to_decimal(geo_polyline)
+        connected_segments = preprocess_segments(decimal_polyline)
+
+
+        approx_path = brute_algo(connected_segments, initial_pos, nodes_manager)
+
+        print("Connected segments: ",connected_segments)
+        fit_algorithm.set_segments(connected_segments)
+        # out, dijkstra_paths = fit_algorithm.algorithm((Decimal(initial_pos[0]), Decimal(initial_pos[1])),  use_rotation=True,
+        #                                               use_continuation=False)
+        print("Finished Algo")
+        # updated_paths = append_ids_to_paths(dijkstra_paths, nodes_manager)
+        return jsonify({"segments": connected_segments, "result": approx_path, "paths": [], "nodes_map": get_nodes_map(nodes_manager)})
+    except:
+        traceback.print_exc()
 
 if __name__ == '__main__':
     app.run()
