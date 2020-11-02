@@ -12,7 +12,7 @@ from segments.cv_contours import *
 from segments.utils import *
 from algorithm.fit_algorithm import FitAlgorithm
 import time
-from algorithm.test import simplified_path_algo, brute_algo
+from algorithm.test import brute_algo
 import traceback
 
 #example client request: curl -u running:art -F "file=@valtho.jpeg" -i http://localhost:5000/polylines

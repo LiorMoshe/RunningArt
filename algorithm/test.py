@@ -21,7 +21,6 @@ from segments.utils import get_closest_node, compute_latlong_angle
 from collections import namedtuple
 from copy import deepcopy
 from geopy.distance import geodesic
-import math
 
 AlgoState = namedtuple("AlgoState", "current_location constructed_segments remaining_segments leftover_distance")
 
@@ -49,15 +48,6 @@ def setup_logger(name, log_file, level=logging.INFO):
 
 logger = setup_logger('first_logger', 'logger.log')
 logger = logging.getLogger('first_logger')
-
-class Route(object):
-
-
-    def __init__(self, initial_loc, movements):
-        self.initial_loc = initial_loc
-        self.movements = movements
-
-
 
 class PossibleRoute(object):
 
@@ -177,12 +167,6 @@ class PossibleRoute(object):
                 return False
 
         return True
-
-
-
-
-
-
 
 def simplify_segments(segments):
     """
@@ -365,6 +349,8 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
                                 possible_routes.append(copied_route)
                             else:
                                 route_stack.append(copied_route)
+
+                                # TODO- Check the effect of removing the break and going over all the possible routes.
                             break
                         else:
                             copied_route.backtrack()
@@ -375,161 +361,13 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
     if len(possible_routes) == 0:
         print("NO ROUTES")
         return []
-    return possible_routes[1].get_full_location_path(nodes_id_to_location)
-
-
-
-def get_route(initial_location, segments):
-    moves = simplify_segments(segments)
-    print("Simplified: ", moves)
-    return Route(initial_location, moves)
+    return possible_routes[0].get_full_location_path(nodes_id_to_location)
 
 def convert_segs(segments):
     new_segs = []
     for seg in segments:
         new_segs.append(((float(seg[0][0]), float(seg[0][1])), (float(seg[1][0]), float(seg[1][1]))))
     return new_segs
-
-
-
-def simplified_path_algo(segments, current_location, nodes_manager, threshold_angle=40):
-    print("Current loc: ", current_location)
-    segments = convert_segs(segments)
-    # The final list of nodes
-    path = []
-
-
-    route = get_route(current_location, segments)
-    nodes_ways = nodes_manager.get_nodes_ways()
-    nodes_id_to_location = nodes_manager.get_nodes_map()
-    leftover_distance = 0
-
-    movements = route.movements
-    current_location = get_closest_node(current_location, nodes_manager.get_nodes())
-    current_location = (float(current_location[0]), float(current_location[1]))
-
-    # The final list of nodes
-    path = []
-    for idx, movement in enumerate(movements):
-
-        # Get the next movement.
-        next_movement = None
-        if idx < len(movements) - 1:
-            next_movement = movements[idx+1]
-
-        target_distance = movement.magnitude
-        covered_distance = 0
-
-        # Go over all the possible directions we can go towards.
-        while covered_distance < target_distance:
-            current_location = (float(current_location[0]), float(current_location[1]))
-            current_node_id = nodes_manager.get_node_id(current_location)
-            path.append(current_node_id)
-
-            # Choose the node with the closest angle, track also the nodes with closest angle to next turn in case we cut.
-            min_angle_diff = float('inf')
-            best_neighbor = None
-
-
-            min_next_angle_diff = float('inf')
-            best_next_neighbor = None
-            best_distance = None
-            for neighbor_id in nodes_ways[current_node_id]:
-                neighbor_node = nodes_id_to_location[neighbor_id]
-                neighbor_node = (float(neighbor_node[0]), float(neighbor_node[1]))
-                nodes_angle = compute_latlong_angle(current_location[0], current_location[1], neighbor_node[0],
-                                                    neighbor_node[1])
-                angle_diff = abs(nodes_angle - movement.angle)
-                if angle_diff < min_angle_diff:
-                    min_angle_diff = angle_diff
-                    best_neighbor = neighbor_id
-                    best_distance = geodesic(current_location, (neighbor_node[0],  neighbor_node[1])).meters
-
-                if next_movement is not None:
-                    next_angle_diff = abs(nodes_angle - next_movement.angle)
-                    if next_angle_diff < min_next_angle_diff:
-                        min_next_angle_diff = next_angle_diff
-                        best_next_neighbor = neighbor_id
-
-
-
-            # If the minimal diff is too large. Check if we can backtrack.
-            if min_angle_diff > 45:
-
-                # Check if there is a closer one to the next angle.
-                if min_next_angle_diff < 45:
-                    # Go in this direction, cut whats remaining, don't update current location, just break from the loop.
-                    # todo - count leftovers -  cut twice if directions are opposite.
-                    break
-                else:
-                    print("PROBLEM, cannot approximate.")
-            else:
-                covered_distance += best_distance
-                current_location = nodes_id_to_location[best_neighbor]
-
-    return path
-
-
-def adjust_segments(segments, current_location, nodes_manager, threshold_angle=40):
-    current_location = get_closest_node(current_location, nodes_manager.get_nodes())
-    leftover_distance = 0
-    nodes_ways = nodes_manager.get_nodes_ways()
-    nodes_id_to_location = nodes_manager.get_nodes_map()
-
-
-
-    # Stack of our past choices, allows us to go backwards.
-    choices_stack = []
-    constructed_segments=  []
-
-    backtracked = False
-    while len(segments) != 0:
-        # Save current state in the stack.
-
-        if not backtracked:
-            choices_stack.append(AlgoState(current_location=deepcopy(current_location),
-                                           constructed_segments=deepcopy(constructed_segments),
-                                           remaining_segments=deepcopy(segments),
-                                           leftover_distance=leftover_distance))
-        backtracked = False
-
-
-        curr_segment = segments.pop(0)
-
-        # Get the angle and distance of the current segment.
-        segment_angle = compute_latlong_angle(curr_segment[0][0],curr_segment[0][1],curr_segment[1][0],curr_segment[1][1])
-        segment_distance = geodesic(curr_segment[0], curr_segment[1]).meters
-
-        # Go over all the possible directions we can go towards.
-        current_node_id = nodes_manager.get_node_id(current_location)
-
-        # Choose the node with the closest angle.
-        min_angle_diff = float('inf')
-        best_neighbor = None
-        for neighbor_id in nodes_ways[current_node_id]:
-            neighbor_node = nodes_id_to_location[neighbor_id]
-            nodes_angle = compute_latlong_angle(current_location[0], current_location[1], neighbor_node[0], neighbor_node[1])
-            angle_diff = abs(nodes_angle - segment_angle)
-            if angle_diff < min_angle_diff:
-                min_angle_diff = angle_diff
-                best_neighbor = neighbor_id
-
-
-        if min_angle_diff < threshold_angle:
-            # Save the current state before transitioning.
-
-
-            nodes_distance = geodesic(current_location, best_neighbor).meters
-            constructed_segments.append((current_location, best_neighbor))
-            leftover_distance += nodes_distance - segment_distance
-            current_location = best_neighbor
-        else:
-            # Backtrack, we are stuck.
-
-            backtracked = True
-
-    return constructed_segments
-
 
 if __name__=="__main__":
     new_segs = []
