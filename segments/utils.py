@@ -34,6 +34,9 @@ def convert_coordinates(polyline, initial_pos):
     current_xy = polyline[0]
     current_geo = initial_pos
 
+    print("Input Polyline: {0}".format(polyline))
+    print("Start Pos: {0}".format(initial_pos))
+
     previous_map = {}
     geo_polyline = []
     for point in polyline:
@@ -50,6 +53,8 @@ def convert_coordinates(polyline, initial_pos):
             current_geo = geo_pos
             previous_map[point] = geo_pos
         current_xy = point
+
+    print("Output GeoPolyline: {0}".format(geo_polyline))
     return geo_polyline
 
 '''
