@@ -21,6 +21,7 @@ from segments.utils import get_closest_node, compute_latlong_angle
 from collections import namedtuple
 from copy import deepcopy
 from geopy.distance import geodesic
+from algorithm.arbitrator import *
 
 AlgoState = namedtuple("AlgoState", "current_location constructed_segments remaining_segments leftover_distance")
 
@@ -58,16 +59,42 @@ class PossibleRoute(object):
         self.current_node_id = node_id
 
         self.movement_idx = 0
+        self.org_movement_dist = {i:movements[i].magnitude for i in range(len(movements))}
         self.dist_per_movement = {i:movements[i].magnitude for i in range(len(movements))}
 
+
+
         self.done = False
+
+        self.expansion_mode = False
+
 
         self.actions = []
         self.path = []
 
+
+    def finished_movement(self):
+        self.expansion_mode = False
+
+        # If we finished last movement - figure is done.
+        if self.is_on_last_movement():
+            self.done = True
+        else:
+            # Jump to the next movement.
+            self.advance_movement()
+
+    def is_valid(self):
+        """
+        Tests whether we should continue searching the path in this route.
+        :return:
+        """
+        return (not self.expansion_mode) or (self.expansion_mode and
+                                             -self.dist_per_movement[self.movement_idx] < self.org_movement_dist[self.movement_idx])
+
     def add_node_for_movement(self, node_id, dist):
         if self.movement_idx not in self.nodes_per_movement:
             self.nodes_per_movement[self.movement_idx] = []
+
 
         self.nodes_per_movement[self.movement_idx].append(node_id)
 
@@ -82,17 +109,26 @@ class PossibleRoute(object):
                                                                                    self.dist_per_movement[self.movement_idx]))
 
         self.current_node_id = node_id
-        if self.dist_per_movement[self.movement_idx] <= 0:
+        if not self.expansion_mode and self.dist_per_movement[self.movement_idx] <= 0:
+            self.finished_movement()
 
-            # If we finished last movement - figure is done.
-            if self.is_on_last_movement():
-                self.done = True
-            else:
-                # Jump to the next movement.
-                self.advance_movement()
+    def extend_movement(self):
+        """
+        Extend the movement.
+        TODO-Extending up to two times the original distance, maybe will be changed in future.
+        :param movement_idx:
+        :return:
+        """
+        self.expansion_mode = True
 
     def advance_movement(self):
         self.movement_idx += 1
+        self.current_movement = self.movements[self.movement_idx]
+
+    def set_previous_movement(self):
+        if self.movement_idx == 0:
+            raise Exception("Can't go back. Current movement is already 0.")
+        self.movement_idx -= 1
         self.current_movement = self.movements[self.movement_idx]
 
     def is_on_last_movement(self):
@@ -128,6 +164,18 @@ class PossibleRoute(object):
             location = node_id_to_location[node_id]
             location_path.append((float(location[0]), float(location[1])))
         return location_path
+
+    def get_movements(self, node_id_to_location):
+        """
+        Convert the given route to a set of movements
+        :return:
+        """
+        location_path = self.get_full_location_path(node_id_to_location)
+        # Structure the path as segments.
+        segments = []
+        for i in range(len(location_path) - 1):
+            segments.append((location_path[i],location_path[i+1]))
+        return simplify_segments(segments)
 
     def num_actions(self):
         return len(self.actions)
@@ -166,11 +214,18 @@ class PossibleRoute(object):
             if dist - other.dist_per_movement[idx] > 1e-1:
                 return False
 
+        for idx, dist in self.org_movement_dist.items():
+            if dist - other.org_movement_dist[idx] > 1e-1:
+                return False
+
+        if self.expansion_mode != other.expansion_mode:
+            return False
+
         return True
 
 def simplify_segments(segments):
     """
-
+    Convert the segments into list of movements.
     :param segments:
     :return:
     """
@@ -203,27 +258,29 @@ def simplify_segments(segments):
     return movements
 
 
-def find_matching_node_for_movement(movement, start_node, start_node_id, nodes_ways, nodes_id_to_location, threshold=80):
+def find_matching_node_for_movement(movement, start_node, start_node_id, nodes_ways, nodes_id_to_location, threshold=50):
     min_angle_diff = float('inf')
     best_neighbor = None
     best_distance = None
+    best_angle = None
     start_node = (float(start_node[0]), float(start_node[1]))
     for neighbor_id in nodes_ways[start_node_id]:
         neighbor_node = nodes_id_to_location[neighbor_id]
         neighbor_node = (float(neighbor_node[0]), float(neighbor_node[1]))
         nodes_angle = compute_latlong_angle(start_node[0], start_node[1], neighbor_node[0],
                                             neighbor_node[1])
-        angle_diff = abs(nodes_angle - movement.angle)
+        angle_diff = min(abs(360 - abs(nodes_angle - movement.angle)),abs(nodes_angle - movement.angle))
         if angle_diff < min_angle_diff:
             min_angle_diff = angle_diff
             best_neighbor = neighbor_id
+            best_angle = nodes_angle
             best_distance = geodesic(start_node, (neighbor_node[0], neighbor_node[1])).meters
 
-
+    logging.info("Most likely match, min angle diff: {0}".format(min_angle_diff))
     if min_angle_diff > threshold:
-        return None, None
-    logging.info("Found match, min angle diff: {0}".format(min_angle_diff))
-    return best_neighbor, best_distance
+        return None, None, None
+
+    return best_neighbor, best_distance, best_angle
 
 def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
     """
@@ -254,8 +311,6 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
     # We don't want to iterate over the same route again and again.
     previous_seen_routes = []
 
-
-
     # Iterate until the stack is completely empty.
     while len(route_stack) != 0:
         logging.info("Possible Routes: {0}, Routes in Stack: {1}".format(len(possible_routes), len(route_stack)))
@@ -267,18 +322,38 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
         node_location = nodes_id_to_location[node_id]
         movement = curr_route.current_movement
 
+        # Stop when the route is not valid.
+        if not curr_route.is_valid():
+            route_stack.pop(0)
+            continue
+
+
+
         # Get best matching neighbor for current movement. We stop when we covered at least the distance of the movement
         # at least thats what we initially aspire to do.
-
-        next_node, dist = find_matching_node_for_movement(movement,node_location, node_id, nodes_ways, nodes_id_to_location)
+        next_node, dist, angle = find_matching_node_for_movement(movement,node_location, node_id, nodes_ways, nodes_id_to_location)
         if next_node is not None:
             logging.info("Advancing current route in the direction of the movement.")
+
+            if curr_route.movement_idx not in curr_route.nodes_per_movement:
+                curr_route.current_movement = Movement(angle=angle, magnitude=movement.magnitude)
+
+
             curr_route.add_node_for_movement(next_node, dist)
+
+            if curr_route.expansion_mode:
+                # Create a copy of the route where we continue on the same expanding route.
+                copied_route = deepcopy(curr_route)
+                route_stack.append(copied_route)
+
+                # Finish movement on the current route.
+                curr_route.finished_movement()
 
             # If the coverage is done, add this as a possible route and pop from the stack.
             if curr_route.done:
                 logging.info("Current route is done, removing from stack.")
-                possible_routes.append(curr_route)
+                if curr_route not in possible_routes:
+                    possible_routes.append(curr_route)
                 route_stack.pop(0)
 
         else:
@@ -296,7 +371,8 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
             # If we are on the last movement, take this as a possible option.
             if curr_route.is_on_last_movement():
                 logging.info("Route is on the last movement, finished.")
-                possible_routes.append(curr_route)
+                if curr_route not in possible_routes:
+                    possible_routes.append(curr_route)
             else:
 
                 # Check if there is a way we can jump straight to the next movement. Done only if we moved a bit
@@ -304,20 +380,22 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
 
                 if curr_route.num_nodes_of_movement(curr_route.movement_idx) > 0:
                     next_movement = curr_route.get_next_movement()
-                    jump_node, jump_dist = find_matching_node_for_movement(next_movement, node_location, node_id, nodes_ways,
+                    jump_node, jump_dist, jump_angle = find_matching_node_for_movement(next_movement, node_location, node_id, nodes_ways,
                                                                            nodes_id_to_location)
 
                     if jump_node is not None:
                         # If we can indeed cut, add this optional route to the stack.
                         copied_route = deepcopy(curr_route)
                         copied_route.advance_movement()
+                        copied_route.current_movement = Movement(angle=jump_angle, magnitude=copied_route.current_movement.magnitude)
                         copied_route.add_node_for_movement(jump_node, jump_dist)
 
 
                         if copied_route not in previous_seen_routes:
                             logging.info("Adding option of cutting to the next movement, adding to the stack.")
                             if copied_route.done:
-                                possible_routes.append(copied_route)
+                                if copied_route not in possible_routes:
+                                    possible_routes.append(copied_route)
                             else:
                                 route_stack.append(copied_route)
 
@@ -335,18 +413,21 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
 
                     next_movement = copied_route.get_next_movement()
                     curr_node_id = copied_route.current_node_id
-                    chosen_node, chosen_dist = find_matching_node_for_movement(next_movement,
+                    chosen_node, chosen_dist, chosen_angle = find_matching_node_for_movement(next_movement,
                                                                                nodes_id_to_location[curr_node_id],
                                                                                curr_node_id,
                                                                                nodes_ways, nodes_id_to_location)
 
                     if chosen_node is not None:
                         copied_route.advance_movement()
+                        copied_route.current_movement = Movement(angle=chosen_angle,
+                                                                 magnitude=copied_route.current_movement.magnitude)
                         copied_route.add_node_for_movement(chosen_node, chosen_dist)
                         if copied_route not in previous_seen_routes:
                             logging.info("Found option to go backwards, number of actions: {0}".format(copied_route.num_actions()))
                             if copied_route.done:
-                                possible_routes.append(copied_route)
+                                if copied_route not in possible_routes:
+                                    possible_routes.append(copied_route)
                             else:
                                 route_stack.append(copied_route)
 
@@ -356,12 +437,24 @@ def brute_algo(segments, current_location, nodes_manager, threshold_angle=40):
                             copied_route.backtrack()
                             chosen_node = None
 
+                # Extend the current movement, allow extension up to two times the original length of the movement.
+                # Do this only when you can go back a movement.
+                if curr_route.movement_idx > 0:
+                    logging.info("Expanding movement {0}".format(curr_route.movement_idx))
+                    copied_route = deepcopy(curr_route)
+                    copied_route.set_previous_movement()
+                    copied_route.extend_movement()
+                    route_stack.append(copied_route)
+
 
     print("Number of possible routes: ", len(possible_routes))
     if len(possible_routes) == 0:
         print("NO ROUTES")
         return []
-    return possible_routes[0].get_full_location_path(nodes_id_to_location)
+
+    # best_route = movement_based_arbitrator(possible_routes, movements, nodes_id_to_location)
+    # return best_route.get_full_location_path(nodes_id_to_location)
+    return possible_routes[2].get_full_location_path(nodes_id_to_location)
 
 def convert_segs(segments):
     new_segs = []
