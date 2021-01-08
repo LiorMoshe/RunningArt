@@ -95,7 +95,7 @@ def text_to_image(text):
     """
     img = Image.new('RGB', (1450, 1450), color='white')
 
-    fnt = ImageFont.truetype('/Library/Fonts/Arial.ttf', 128)
+    fnt = ImageFont.truetype('/Downloads/arial.ttf', 128)
     d = ImageDraw.Draw(img)
     d.text((10, 10), text, font=fnt, fill=(0, 0, 0))
     return img
@@ -146,7 +146,7 @@ def compute_latlong_angle(lat1, long1, lat2, long2):
     d_long = long2-long1
     y = math.sin(d_long) * math.cos(lat2)
     x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(d_long)
-    brng = math.atan2(y,x)
+    brng = math.atan2(y, x)
     brng = rad2deg(brng)
     # brng = (brng + 360) % 360 # count degrees counter-clockwise - remove to make clockwise
     return brng
